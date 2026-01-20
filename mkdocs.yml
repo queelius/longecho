@@ -1,0 +1,47 @@
+site_name: longecho
+site_description: ECHO philosophy documentation and compliance validator
+site_author: Alex Towell
+repo_url: https://github.com/alextowell/longecho
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - tables
+
+nav:
+  - Home: index.md
+  - ECHO Philosophy: echo-philosophy.md
+  - Getting Started: getting-started.md
+  - Validator: validator.md
+  - Blog:
+    - Why ECHO: blog/why-echo.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/alextowell/longecho

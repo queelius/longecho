@@ -1,0 +1,249 @@
+"""
+ECHO compliance checker.
+
+Checks if a directory is ECHO-compliant:
+1. Has a README.md or README.txt at the root
+2. Contains data in durable formats
+"""
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional, Set
+
+
+# Durable formats recognized by ECHO
+DURABLE_EXTENSIONS: Set[str] = {
+    # Structured data
+    ".db", ".sqlite", ".sqlite3",  # SQLite
+    ".json", ".jsonl",              # JSON
+    # Documents
+    ".md", ".markdown",             # Markdown
+    ".txt", ".text",                # Plain text
+    ".rst",                         # reStructuredText
+    # Archives
+    ".zip",                         # ZIP
+    # Images (for photos/media archives)
+    ".jpg", ".jpeg", ".png", ".webp", ".gif",
+    # Data
+    ".csv", ".tsv",                 # Tabular data
+    ".xml",                         # XML
+    ".yaml", ".yml",                # YAML
+}
+
+# Patterns to exclude from format detection
+EXCLUDE_PATTERNS: Set[str] = {
+    "README.md", "README.txt",      # Don't count README as "data"
+    "CLAUDE.md", "CHANGELOG.md",    # Meta files
+    ".gitignore", ".gitattributes",
+    "pyproject.toml", "setup.py", "setup.cfg",
+    "requirements.txt",
+}
+
+
+@dataclass
+class ComplianceResult:
+    """Result of an ECHO compliance check."""
+
+    compliant: bool
+    path: Path
+    readme_path: Optional[Path] = None
+    readme_summary: Optional[str] = None
+    formats: List[str] = field(default_factory=list)
+    durable_formats: List[str] = field(default_factory=list)
+    reason: Optional[str] = None
+
+    def __str__(self) -> str:
+        if self.compliant:
+            return f"ECHO-compliant: {self.path}"
+        return f"Not ECHO-compliant: {self.path} ({self.reason})"
+
+
+def find_readme(path: Path) -> Optional[Path]:
+    """
+    Find README file at the root of a directory.
+
+    Args:
+        path: Directory to check
+
+    Returns:
+        Path to README if found, None otherwise
+    """
+    for name in ["README.md", "README.txt", "readme.md", "readme.txt"]:
+        readme = path / name
+        if readme.is_file():
+            return readme
+    return None
+
+
+def extract_first_paragraph(readme_path: Path) -> Optional[str]:
+    """
+    Extract the first meaningful paragraph from a README.
+
+    Skips title lines (starting with #) and empty lines.
+
+    Args:
+        readme_path: Path to README file
+
+    Returns:
+        First paragraph text, or None if extraction fails
+    """
+    try:
+        content = readme_path.read_text(encoding="utf-8")
+        lines = content.split("\n")
+
+        paragraph_lines = []
+        in_paragraph = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Skip empty lines before paragraph
+            if not stripped:
+                if in_paragraph:
+                    # End of paragraph
+                    break
+                continue
+
+            # Skip title lines
+            if stripped.startswith("#"):
+                continue
+
+            # Skip frontmatter
+            if stripped == "---":
+                continue
+
+            # Skip metadata lines
+            if ":" in stripped and not in_paragraph:
+                # Likely frontmatter or metadata
+                if stripped.split(":")[0].strip().lower() in {
+                    "version", "status", "date", "author", "title"
+                }:
+                    continue
+
+            # Found paragraph content
+            in_paragraph = True
+            paragraph_lines.append(stripped)
+
+        if paragraph_lines:
+            return " ".join(paragraph_lines)[:500]  # Limit length
+
+        return None
+    except Exception:
+        return None
+
+
+def detect_formats(path: Path, max_depth: int = 2) -> List[str]:
+    """
+    Detect file formats in a directory.
+
+    Args:
+        path: Directory to scan
+        max_depth: Maximum directory depth to scan
+
+    Returns:
+        List of file extensions found
+    """
+    formats = set()
+
+    def scan_directory(dir_path: Path, depth: int):
+        if depth > max_depth:
+            return
+
+        try:
+            for item in dir_path.iterdir():
+                if item.name.startswith("."):
+                    continue
+
+                if item.is_file():
+                    if item.name not in EXCLUDE_PATTERNS:
+                        suffix = item.suffix.lower()
+                        if suffix:
+                            formats.add(suffix)
+                elif item.is_dir():
+                    scan_directory(item, depth + 1)
+        except PermissionError:
+            pass
+
+    scan_directory(path, 0)
+    return sorted(formats)
+
+
+def is_durable_format(extension: str) -> bool:
+    """
+    Check if a file extension is a durable format.
+
+    Args:
+        extension: File extension (with or without leading dot)
+
+    Returns:
+        True if the format is durable
+    """
+    ext = extension.lower()
+    if not ext.startswith("."):
+        ext = "." + ext
+    return ext in DURABLE_EXTENSIONS
+
+
+def check_compliance(path: Path) -> ComplianceResult:
+    """
+    Check if a directory is ECHO-compliant.
+
+    A directory is ECHO-compliant if it has:
+    1. A README.md or README.txt at the root
+    2. Data in durable formats
+
+    Args:
+        path: Directory to check
+
+    Returns:
+        ComplianceResult with compliance status and details
+    """
+    path = Path(path).resolve()
+
+    if not path.exists():
+        return ComplianceResult(
+            compliant=False,
+            path=path,
+            reason="Path does not exist"
+        )
+
+    if not path.is_dir():
+        return ComplianceResult(
+            compliant=False,
+            path=path,
+            reason="Path is not a directory"
+        )
+
+    # Check for README
+    readme = find_readme(path)
+    if not readme:
+        return ComplianceResult(
+            compliant=False,
+            path=path,
+            reason="No README.md or README.txt found"
+        )
+
+    # Detect formats
+    formats = detect_formats(path)
+    durable = [f for f in formats if is_durable_format(f)]
+
+    # Check for durable formats
+    if not durable:
+        return ComplianceResult(
+            compliant=False,
+            path=path,
+            readme_path=readme,
+            readme_summary=extract_first_paragraph(readme),
+            formats=formats,
+            durable_formats=[],
+            reason="No durable data formats found"
+        )
+
+    return ComplianceResult(
+        compliant=True,
+        path=path,
+        readme_path=readme,
+        readme_summary=extract_first_paragraph(readme),
+        formats=formats,
+        durable_formats=durable
+    )
