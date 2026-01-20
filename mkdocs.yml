@@ -1,7 +1,7 @@
 site_name: longecho
 site_description: ECHO philosophy documentation and compliance validator
 site_author: Alex Towell
-repo_url: https://github.com/alextowell/longecho
+repo_url: https://github.com/queelius/longecho
 
 theme:
   name: material
@@ -44,4 +44,4 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/alextowell/longecho
+      link: https://github.com/queelius/longecho
