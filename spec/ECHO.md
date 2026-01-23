@@ -90,6 +90,72 @@ A data source is **ECHO-compliant** if it has:
 
 That's it. No manifest files, no schema specifications, no version numbers, no special conventions.
 
+---
+
+## Optional: Web Presentation
+
+ECHO archives MAY include additional structure to support web-based browsing. This is entirely optional - an archive without these elements is still fully ECHO-compliant.
+
+### The site/ Directory
+
+A `site/` directory containing `index.html` provides a static, browsable representation of the data. This can be opened directly in any web browser without a server.
+
+The site/ is a **convenience layer** - the raw data (SQLite, JSON, markdown) must still exist alongside it. The site/ does not replace the archive; it presents it.
+
+### The docs/ Directory
+
+A `docs/` directory containing markdown files provides human-readable documentation that tools can render. This is simpler than site/ - no HTML required.
+
+### The Manifest
+
+A `manifest.json` or `manifest.yaml` at the archive root provides machine-readable metadata. This enables tools to generate unified sites, discover data sources, and present archives intelligently.
+
+**Minimal manifest:**
+```json
+{
+  "version": "1.0",
+  "name": "Conversation Archive",
+  "description": "AI conversation history from ChatGPT, Claude, etc."
+}
+```
+
+**Extended manifest:**
+```json
+{
+  "version": "1.0",
+  "name": "Conversation Archive",
+  "description": "AI conversation history",
+  "type": "database",
+  "browsable": true,
+  "site": "site/",
+  "icon": "chat"
+}
+```
+
+The manifest is self-describing metadata - it follows the same ECHO philosophy as README.md, but for machines.
+
+### Hierarchical Archives
+
+An ECHO archive MAY contain other ECHO archives as subdirectories:
+
+```
+my-archive/
+├── README.md                # Top-level description
+├── manifest.json            # Lists/configures sub-archives
+├── conversations/           # Sub-archive (ECHO-compliant on its own)
+│   ├── README.md
+│   ├── manifest.json
+│   ├── data.db
+│   └── site/
+├── bookmarks/               # Another sub-archive
+│   ├── README.md
+│   └── ...
+└── site/                    # Unified presentation (optional)
+    └── index.html
+```
+
+Each sub-archive is independently ECHO-compliant and can be extracted/copied standalone.
+
 ### Example: ECHO-Compliant Conversation Archive
 
 ```

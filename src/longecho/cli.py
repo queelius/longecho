@@ -1,11 +1,13 @@
 """
-longecho CLI - ECHO compliance validator.
+longecho CLI - ECHO compliance validator and site builder.
 
 Commands:
     check    - Check if a directory is ECHO-compliant
     discover - Find ECHO-compliant directories
     search   - Search README descriptions
     info     - Show detailed info about an ECHO source
+    build    - Build a static site from an ECHO archive
+    serve    - Serve an ECHO archive via HTTP
 """
 
 from pathlib import Path
@@ -17,8 +19,10 @@ from rich.table import Table
 from rich.panel import Panel
 
 from . import __version__
-from .checker import check_compliance, DURABLE_EXTENSIONS
+from .checker import check_compliance
 from .discovery import discover_sources, search_sources, get_source_info
+from .build import build_site
+from .serve import serve_archive
 
 app = typer.Typer(
     name="longecho",
@@ -87,7 +91,7 @@ def check(
     if result.compliant:
         console.print(f"[green]✓[/green] ECHO-compliant: {path}")
 
-        if verbose:
+        if verbose and result.readme_path:
             console.print()
             console.print(f"  [dim]README:[/dim] {result.readme_path.name}")
             if result.readme_summary:
@@ -285,6 +289,111 @@ def formats():
         console.print(f"[cyan]{category}:[/cyan]")
         console.print(f"  {', '.join(extensions)}")
         console.print()
+
+
+@app.command()
+def build(
+    path: Path = typer.Argument(
+        ...,
+        help="ECHO archive directory to build site for.",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output directory (default: path/site/).",
+    ),
+    bundle: bool = typer.Option(
+        False,
+        "--bundle",
+        "-b",
+        help="Copy all sub-sites into unified site.",
+    ),
+    deep: bool = typer.Option(
+        False,
+        "--deep",
+        "-d",
+        help="Aggressive discovery mode.",
+    ),
+    offline: bool = typer.Option(
+        True,
+        "--offline/--no-offline",
+        help="Bundle all CSS/JS/fonts (default: true).",
+    ),
+):
+    """
+    Build a static site from an ECHO archive.
+
+    Generates a unified browsable site from an ECHO archive and its
+    sub-sources. Reads manifest.json/yaml if present for configuration.
+    """
+    console.print(f"[bold]Building site for:[/bold] {path}")
+
+    result = build_site(
+        path=path,
+        output=output,
+        bundle=bundle,
+        deep=deep,
+        offline=offline,
+    )
+
+    if result.success:
+        console.print(f"[green]✓[/green] Built site with {result.sources_count} source(s)")
+        console.print(f"  [dim]Output:[/dim] {result.output_path}")
+    else:
+        console.print(f"[red]✗[/red] Build failed: {result.error}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def serve(
+    path: Path = typer.Argument(
+        ...,
+        help="ECHO archive directory to serve.",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+    port: int = typer.Option(
+        8000,
+        "--port",
+        "-p",
+        help="Port number to serve on.",
+    ),
+    no_build: bool = typer.Option(
+        False,
+        "--no-build",
+        help="Don't build site if missing.",
+    ),
+    open_browser: bool = typer.Option(
+        False,
+        "--open",
+        "-o",
+        help="Open browser automatically.",
+    ),
+):
+    """
+    Serve an ECHO archive via HTTP.
+
+    Starts a local HTTP server to preview the archive site.
+    If no site exists, builds one first (unless --no-build is specified).
+    """
+    result = serve_archive(
+        path=path,
+        port=port,
+        build_if_missing=not no_build,
+        open_browser=open_browser,
+        quiet=False,
+    )
+
+    if not result.success:
+        console.print(f"[red]✗[/red] Serve failed: {result.error}")
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

@@ -1,18 +1,19 @@
-# longecho: ECHO Documentation and Validator
+# longecho: ECHO Documentation, Validator, and Site Builder
 
-**Version:** 0.3 (Draft Specification)
-**Status:** Incubating
+**Version:** 0.2.0
+**Status:** Alpha
 
 ---
 
 ## What longecho Is
 
-longecho provides two things:
+longecho provides:
 
 1. **Documentation** — Explains and motivates the ECHO philosophy
 2. **Validator** — Checks if a directory is ECHO-compliant
-
-That's it. longecho is not an orchestrator, not a format mediator, not a registry.
+3. **Discovery** — Finds and searches ECHO sources
+4. **Site Builder** — Generates unified static sites from archives
+5. **Dev Server** — Previews archives via HTTP
 
 ---
 
@@ -40,9 +41,7 @@ A directory is **ECHO-compliant** if it has:
 longecho check ~/my-data/
 
 # Output:
-#   ✓ README.md exists
-#   ✓ Durable formats: SQLite (data.db), Markdown (*.md)
-#   → ECHO-compliant
+#   ✓ ECHO-compliant: /home/user/my-data
 ```
 
 ```bash
@@ -50,47 +49,120 @@ longecho check ~/my-data/
 longecho check ~/random-folder/
 
 # Output:
-#   ✗ No README.md or README.txt found
-#   → Not ECHO-compliant
+#   ✗ Not ECHO-compliant: /home/user/random-folder
+#     Reason: No README.md or README.txt found
 ```
 
-### Discover Sources (Optional)
+Use `--verbose` for detailed output showing README location and detected formats.
+
+### Discover Sources
 
 ```bash
 # Find ECHO-compliant directories under a path
 longecho discover ~/
 
 # Output:
+#   Found 3 ECHO source(s):
+#
 #   ~/.local/share/ctk/
-#     README says: AI conversation history
-#     Format: SQLite
+#     AI conversation history
+#     Formats: .db, .json
 #
 #   ~/blog/content/
-#     README says: Personal blog
-#     Format: Markdown
+#     Personal blog
+#     Formats: .md
 ```
 
-### Search Across Sources (Optional)
+Use `--table` for tabular output, `--max-depth` to limit recursion.
+
+### Search Sources
 
 ```bash
 # Search README descriptions
 longecho search ~/ "conversations"
 
 # Output:
-#   ~/.local/share/ctk/ — "AI conversation history"
+#   Found 1 matching source(s):
+#
+#   ~/.local/share/ctk/
+#     AI conversation history
 ```
+
+### Source Info
+
+```bash
+# Detailed information about a source
+longecho info ~/.local/share/ctk/
+
+# Output shows README, formats, and summary
+```
+
+### List Formats
+
+```bash
+# Show recognized durable formats
+longecho formats
+
+# Lists: Structured data, Documents, Archives, Images, Data
+```
+
+### Build Static Site
+
+```bash
+# Generate unified static site from archive(s)
+longecho build ~/my-archive/
+
+# Output:
+#   Building site for: /home/user/my-archive
+#   ✓ Built site with 3 source(s)
+#     Output: /home/user/my-archive/site
+```
+
+The build command:
+
+- Reads `manifest.json` or `manifest.yaml` if present
+- Auto-discovers sub-archives (manifest overrides auto-discovery)
+- For sources with `site/`: links by default, copies with `--bundle`
+- Generates index pages with navigation between sources
+- Output: `site/` directory with `index.html`
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--bundle` | Copy all sub-sites into unified site (portable) |
+| `--deep` | Aggressive discovery mode |
+| `--output` | Custom output directory (default: `site/`) |
+
+### Serve Archive
+
+```bash
+# Serve archive via HTTP for local preview
+longecho serve ~/my-archive/ --port 8000
+
+# Output:
+#   Building site for: /home/user/my-archive
+#   Built site with 3 source(s)
+#   Serving at http://localhost:8000
+#   Press Ctrl+C to stop
+```
+
+The serve command:
+
+- Runs `longecho build` if `site/` doesn't exist
+- Serves the `site/` directory via HTTP
+- Use `--no-build` to skip automatic building
+- Use `--open` to open browser automatically
 
 ---
 
-## What longecho Is NOT
+## Boundaries
 
-**Not an orchestrator.** Toolkits invoke themselves. `ctk export` runs ctk, not longecho.
+**longecho unifies, but doesn't orchestrate toolkits.** Each toolkit (ctk, btk, etc.) exports its own ECHO-compliant archive. longecho's `build` command combines these into a unified browsable site, but doesn't invoke or manage the toolkits themselves.
 
-**Not a format mediator.** There is no central interchange format. If persona-tk needs JSONL, persona-tk defines that in its own spec.
+**longecho doesn't mediate formats.** There is no central interchange format. Each toolkit defines its own input/output formats.
 
-**Not a registry.** ECHO.md doesn't list which toolkits are compliant. If a toolkit is ECHO-compliant, its own README says so.
-
-**Not a synthesis wrapper.** To run stone-tk, run stone-tk. longecho doesn't wrap it.
+**longecho doesn't maintain a registry.** If a toolkit is ECHO-compliant, its own README documents that fact.
 
 ---
 
@@ -98,41 +170,26 @@ longecho search ~/ "conversations"
 
 ### 1. Each Source Manages Itself
 
-ctk has its own README explaining its format. btk has its own README. longecho doesn't need to know about them — it just checks if READMEs exist.
+ctk has its own README explaining its format. btk has its own README. longecho checks for READMEs but doesn't need to understand the underlying data.
 
 ### 2. Toolkits Define Their Own Interfaces
 
 persona-tk defines what input it accepts. stone-tk discovers sources by reading READMEs. There's no central specification that bridges them.
 
-### 3. Minimal Scope
+### 3. READMEs Are the Interface
 
-longecho is documentation + a validator. Nothing more. This keeps it from becoming a single point of failure or a bottleneck for evolution.
+A human or LLM can understand an ECHO source by reading its README. Manifests are optional machine-readable metadata, not required.
 
-### 4. READMEs Are the Interface
+### 4. Graceful Degradation
 
-A human or LLM can understand an ECHO source by reading its README. No schemas, no manifests, no special protocols.
-
----
-
-## Optional Convenience Commands
-
-longecho may provide hardcoded convenience operations for common tasks:
-
-```bash
-# Show what ECHO sources you have
-longecho status ~/
-
-# Quick overview of an ECHO source
-longecho info ~/.local/share/ctk/
-```
-
-These are conveniences, not orchestration. They just read READMEs and report.
+An ECHO archive works without longecho. longecho adds convenience (site generation, discovery) but the archive is self-contained.
 
 ---
 
 ## Related
 
 - [ECHO.md](ECHO.md) — The ECHO philosophy
+- [MANIFEST-SCHEMA.md](MANIFEST-SCHEMA.md) — Manifest format specification
 - [PERSONA-TK.md](PERSONA-TK.md) — Persona toolkit (standalone)
 - [STONE-TK.md](STONE-TK.md) — Plain text distillation toolkit (standalone)
 - [TOOLKIT-ECOSYSTEM.md](TOOLKIT-ECOSYSTEM.md) — List of existing toolkits

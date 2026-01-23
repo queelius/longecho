@@ -4,52 +4,88 @@ Guidance for Claude Code when working with this repository.
 
 ## Project Status
 
-**longecho is specification-only.** No implementation exists yet.
+**Alpha.** Core functionality implemented and tested (78% coverage, 114 tests).
 
 ## What longecho Is
 
 longecho provides:
 
-1. **Documentation** — Explains and motivates the ECHO philosophy
-2. **Validator** — Checks if a directory is ECHO-compliant (`longecho check`)
+1. **Documentation** — Explains and motivates the ECHO philosophy (`spec/`)
+2. **Validator** — Checks ECHO compliance (`longecho check`)
+3. **Discovery** — Finds ECHO sources (`longecho discover`, `longecho search`)
+4. **Site Builder** — Generates unified static sites (`longecho build`)
+5. **Dev Server** — Previews archives locally (`longecho serve`)
 
-That's it. longecho is not an orchestrator, not a format mediator, not a registry.
+## Commands
 
-## What longecho Is NOT
+```bash
+longecho check ~/path       # Is this directory ECHO-compliant?
+longecho discover ~/        # Find ECHO-compliant directories
+longecho search ~/ "query"  # Search README descriptions
+longecho info ~/path        # Show detailed source info
+longecho formats            # List recognized durable formats
+longecho build ~/archive    # Generate static site
+longecho serve ~/archive    # Preview via HTTP
+```
 
-- **Not an orchestrator** — Toolkits (ctk, btk, persona-tk, stone-tk) invoke themselves
-- **Not a format mediator** — Each toolkit defines its own input/output formats
-- **Not a registry** — Each toolkit's own README documents its compliance
+## Architecture
+
+```
+src/longecho/
+├── __init__.py      # Public API exports
+├── checker.py       # ECHO compliance checking
+├── discovery.py     # Source discovery and search
+├── manifest.py      # Manifest loading/validation
+├── build.py         # Static site generation
+├── serve.py         # HTTP server for preview
+├── cli.py           # Typer CLI interface
+└── templates/       # Jinja2 HTML templates
+```
 
 ## Key Principles
 
 1. **ECHO philosophy** — Self-describing data with README.md + durable formats
-2. **Minimal scope** — longecho is docs + validator only
-3. **Standalone toolkits** — persona-tk and stone-tk work independently
+2. **Graceful degradation** — Archives work without longecho; longecho adds convenience
+3. **Standalone toolkits** — ctk, btk, etc. work independently; longecho unifies their outputs
 
 ## Documentation Structure
 
 ```
 spec/
 ├── ECHO.md              # ECHO philosophy (standalone)
-├── LONGECHO.md          # Validator specification
-├── PERSONA-TK.md        # Persona toolkit spec (standalone)
-├── STONE-TK.md          # Stone toolkit spec (standalone)
-├── TOOLKIT-ECOSYSTEM.md # List of existing toolkits
+├── LONGECHO.md          # Tool specification
+├── MANIFEST-SCHEMA.md   # Manifest format spec
+├── PERSONA-TK.md        # Persona toolkit spec
+├── STONE-TK.md          # Stone toolkit spec
+├── TOOLKIT-ECOSYSTEM.md # List of toolkits
 └── INTERVIEW-INSIGHTS.md # Design decisions
 ```
 
-## Expected Commands (When Implemented)
+## Development
 
 ```bash
-longecho check ~/path    # Is this directory ECHO-compliant?
-longecho discover ~/     # Find ECHO-compliant directories
-longecho search ~/       # Search README descriptions
+# Install with dev dependencies
+pip install -e ".[dev,full]"
+
+# Run tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=src/longecho --cov-report=term-missing
+
+# Type checking
+mypy src/longecho/
+
+# Linting
+ruff check src/longecho/
 ```
 
-## Expected Tech Stack
+## Tech Stack
 
-- Python 3.8+
-- pytest for testing
-- black/flake8/mypy for code quality
+- Python 3.9+
 - Typer for CLI
+- Rich for terminal output
+- Jinja2 for templates
+- pytest for testing
+- mypy for type checking
+- ruff for linting

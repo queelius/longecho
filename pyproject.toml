@@ -4,21 +4,20 @@ build-backend = "hatchling.build"
 
 [project]
 name = "longecho"
-version = "0.1.0"
-description = "ECHO philosophy documentation and compliance validator"
+version = "0.2.0"
+description = "ECHO philosophy documentation, compliance validator, and site builder"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = "MIT"
 authors = [
     { name = "Alex Towell" }
 ]
-keywords = ["echo", "archiving", "durability", "validator"]
+keywords = ["echo", "archiving", "durability", "validator", "static-site"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -27,6 +26,8 @@ classifiers = [
 dependencies = [
     "typer>=0.9.0",
     "rich>=13.0.0",
+    "jinja2>=3.0.0",
+    "markdown>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +42,11 @@ docs = [
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.0.0",
 ]
+full = [
+    "pyyaml>=6.0.0",
+    "jsonschema>=4.0.0",
+    "datasette>=0.64.0",
+]
 
 [project.scripts]
 longecho = "longecho.cli:app"
@@ -48,12 +54,16 @@ longecho = "longecho.cli:app"
 [tool.hatch.build.targets.wheel]
 packages = ["src/longecho"]
 
+[tool.hatch.build.targets.wheel.shared-data]
+"schemas" = "share/longecho/schemas"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
     "/tests",
     "/spec",
     "/docs",
+    "/schemas",
 ]
 
 [tool.pytest.ini_options]
@@ -63,9 +73,14 @@ python_functions = ["test_*"]
 
 [tool.black]
 line-length = 88
-target-version = ["py38"]
+target-version = ["py39"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["yaml"]
+ignore_missing_imports = true

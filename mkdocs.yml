@@ -1,7 +1,9 @@
 site_name: longecho
-site_description: ECHO philosophy documentation and compliance validator
+site_description: ECHO philosophy documentation, compliance validator, and site builder
 site_author: Alex Towell
 repo_url: https://github.com/queelius/longecho
+
+docs_dir: spec
 
 theme:
   name: material
@@ -35,11 +37,14 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - ECHO Philosophy: echo-philosophy.md
-  - Getting Started: getting-started.md
-  - Validator: validator.md
-  - Blog:
-    - Why ECHO: blog/why-echo.md
+  - ECHO Philosophy: ECHO.md
+  - longecho Tool: LONGECHO.md
+  - Manifest Schema: MANIFEST-SCHEMA.md
+  - Toolkits:
+    - Persona Toolkit: PERSONA-TK.md
+    - Stone Toolkit: STONE-TK.md
+    - Ecosystem: TOOLKIT-ECOSYSTEM.md
+  - Design Notes: INTERVIEW-INSIGHTS.md
 
 extra:
   social:

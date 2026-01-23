@@ -1,9 +1,20 @@
 """
 ECHO compliance checker.
 
-Checks if a directory is ECHO-compliant:
-1. Has a README.md or README.txt at the root
-2. Contains data in durable formats
+This module provides functionality to check if a directory is ECHO-compliant.
+A directory is ECHO-compliant if it meets two criteria:
+
+1. Has a README.md or README.txt at the root explaining the data
+2. Contains data in durable formats (SQLite, JSON, Markdown, etc.)
+
+The primary function is `check_compliance()` which returns a `ComplianceResult`
+with detailed information about the compliance status.
+
+Example:
+    >>> from longecho.checker import check_compliance
+    >>> result = check_compliance("/path/to/archive")
+    >>> if result.compliant:
+    ...     print(f"Compliant! Formats: {result.durable_formats}")
 """
 
 from dataclasses import dataclass, field
@@ -38,6 +49,10 @@ EXCLUDE_PATTERNS: Set[str] = {
     "pyproject.toml", "setup.py", "setup.cfg",
     "requirements.txt",
 }
+
+# Configuration constants
+DEFAULT_FORMAT_SCAN_DEPTH: int = 2  # Max depth for format detection
+MAX_README_SUMMARY_LENGTH: int = 500  # Max characters for README summary
 
 
 @dataclass
@@ -125,14 +140,14 @@ def extract_first_paragraph(readme_path: Path) -> Optional[str]:
             paragraph_lines.append(stripped)
 
         if paragraph_lines:
-            return " ".join(paragraph_lines)[:500]  # Limit length
+            return " ".join(paragraph_lines)[:MAX_README_SUMMARY_LENGTH]
 
         return None
     except Exception:
         return None
 
 
-def detect_formats(path: Path, max_depth: int = 2) -> List[str]:
+def detect_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> List[str]:
     """
     Detect file formats in a directory.
 

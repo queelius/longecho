@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/queelius/longecho/schemas/manifest.schema.json",
+  "title": "ECHO Manifest",
+  "description": "Machine-readable metadata for ECHO archives",
+  "type": "object",
+  "required": ["version", "name", "description"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version",
+      "enum": ["1.0"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["database", "documents", "site", "mixed"],
+      "description": "Primary content type"
+    },
+    "browsable": {
+      "type": "boolean",
+      "default": true,
+      "description": "Include in generated sites"
+    },
+    "site": {
+      "type": "string",
+      "description": "Path to pre-built static site"
+    },
+    "docs": {
+      "type": "string",
+      "description": "Path to markdown documentation"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icon identifier"
+    },
+    "order": {
+      "type": "number",
+      "description": "Display order"
+    },
+    "sources": {
+      "type": "array",
+      "description": "Sub-archive configurations",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Relative path to sub-archive"
+          },
+          "order": {
+            "type": "number",
+            "description": "Display order override"
+          },
+          "browsable": {
+            "type": "boolean",
+            "description": "Override browsable setting"
+          },
+          "name": {
+            "type": "string",
+            "description": "Override display name"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,14 +1,26 @@
 """
 ECHO source discovery.
 
-Find ECHO-compliant directories under a root path.
+This module provides functionality to discover and search ECHO-compliant
+directories under a root path. It recursively scans directories looking
+for README files and checks each for ECHO compliance.
+
+Key functions:
+- `discover_sources()`: Find all ECHO sources under a path
+- `search_sources()`: Find sources matching a search query
+- `get_source_info()`: Get detailed info about a specific source
+
+Example:
+    >>> from longecho.discovery import discover_sources
+    >>> for source in discover_sources("~/"):
+    ...     print(f"{source.path}: {source.readme_summary}")
 """
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Iterator
 
-from .checker import check_compliance, find_readme, extract_first_paragraph, ComplianceResult
+from .checker import check_compliance, find_readme
 
 
 # Directories to skip during discovery
@@ -92,7 +104,7 @@ def discover_sources(
             readme = find_readme(path)
             if readme:
                 result = check_compliance(path)
-                if result.compliant:
+                if result.compliant and result.readme_path:
                     yield EchoSource(
                         path=result.path,
                         readme_path=result.readme_path,
@@ -165,7 +177,7 @@ def get_source_info(path: Path) -> Optional[EchoSource]:
     """
     result = check_compliance(path)
 
-    if not result.compliant:
+    if not result.compliant or not result.readme_path:
         return None
 
     return EchoSource(
