@@ -25,7 +25,7 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 try:
     import yaml
@@ -77,7 +77,7 @@ class SourceConfig:
     name: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SourceConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "SourceConfig":
         """Create SourceConfig from a dictionary."""
         return cls(
             path=data["path"],
@@ -100,13 +100,13 @@ class Manifest:
     docs: Optional[str] = None
     icon: Optional[str] = None
     order: Optional[int] = None
-    sources: List[SourceConfig] = field(default_factory=list)
+    sources: list[SourceConfig] = field(default_factory=list)
 
     # Path where manifest was loaded from
     path: Optional[Path] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], path: Optional[Path] = None) -> "Manifest":
+    def from_dict(cls, data: dict[str, Any], path: Optional[Path] = None) -> "Manifest":
         """Create Manifest from a dictionary."""
         sources = [
             SourceConfig.from_dict(s) for s in data.get("sources", [])
@@ -126,9 +126,9 @@ class Manifest:
             path=path,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert manifest to dictionary."""
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "version": self.version,
             "name": self.name,
             "description": self.description,
@@ -179,7 +179,7 @@ def find_manifest(path: Path) -> Optional[Path]:
     return None
 
 
-def load_manifest_data(manifest_path: Path) -> Dict[str, Any]:
+def load_manifest_data(manifest_path: Path) -> dict[str, Any]:
     """
     Load manifest data from a file.
 
@@ -197,10 +197,10 @@ def load_manifest_data(manifest_path: Path) -> Dict[str, Any]:
 
     if suffix == ".json":
         try:
-            result: Dict[str, Any] = json.loads(content)
+            result: dict[str, Any] = json.loads(content)
             return result
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in {manifest_path}: {e}")
+            raise ValueError(f"Invalid JSON in {manifest_path}: {e}") from e
 
     elif suffix in (".yaml", ".yml"):
         if not YAML_AVAILABLE:
@@ -210,15 +210,15 @@ def load_manifest_data(manifest_path: Path) -> Dict[str, Any]:
             )
         try:
             result = yaml.safe_load(content)
-            return result  # type: ignore[no-any-return]
+            return result
         except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML in {manifest_path}: {e}")
+            raise ValueError(f"Invalid YAML in {manifest_path}: {e}") from e
 
     else:
         raise ValueError(f"Unsupported manifest format: {suffix}")
 
 
-def validate_manifest_data(data: Dict[str, Any]) -> List[str]:
+def validate_manifest_data(data: dict[str, Any]) -> list[str]:
     """
     Validate manifest data against the schema.
 

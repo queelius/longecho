@@ -19,11 +19,10 @@ Example:
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Set
-
+from typing import Optional
 
 # Durable formats recognized by ECHO
-DURABLE_EXTENSIONS: Set[str] = {
+DURABLE_EXTENSIONS: set[str] = {
     # Structured data
     ".db", ".sqlite", ".sqlite3",  # SQLite
     ".json", ".jsonl",              # JSON
@@ -42,7 +41,7 @@ DURABLE_EXTENSIONS: Set[str] = {
 }
 
 # Patterns to exclude from format detection
-EXCLUDE_PATTERNS: Set[str] = {
+EXCLUDE_PATTERNS: set[str] = {
     "README.md", "README.txt",      # Don't count README as "data"
     "CLAUDE.md", "CHANGELOG.md",    # Meta files
     ".gitignore", ".gitattributes",
@@ -63,8 +62,8 @@ class ComplianceResult:
     path: Path
     readme_path: Optional[Path] = None
     readme_summary: Optional[str] = None
-    formats: List[str] = field(default_factory=list)
-    durable_formats: List[str] = field(default_factory=list)
+    formats: list[str] = field(default_factory=list)
+    durable_formats: list[str] = field(default_factory=list)
     reason: Optional[str] = None
 
     def __str__(self) -> str:
@@ -143,11 +142,13 @@ def extract_first_paragraph(readme_path: Path) -> Optional[str]:
             return " ".join(paragraph_lines)[:MAX_README_SUMMARY_LENGTH]
 
         return None
-    except Exception:
+    except (OSError, UnicodeDecodeError):
+        # OSError: file system errors (e.g., file disappeared)
+        # UnicodeDecodeError: invalid UTF-8 encoding
         return None
 
 
-def detect_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> List[str]:
+def detect_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> list[str]:
     """
     Detect file formats in a directory.
 

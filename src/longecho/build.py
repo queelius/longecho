@@ -20,13 +20,12 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from .checker import check_compliance, find_readme
-from .manifest import load_manifest, Manifest
-
+from .checker import ComplianceResult, check_compliance, find_readme
+from .manifest import Manifest, load_manifest
 
 # Icon mapping from identifiers to emoji
 ICON_EMOJI_MAP = {
@@ -54,7 +53,7 @@ class SourceInfo:
     icon: Optional[str] = None
     icon_emoji: str = ICON_EMOJI_MAP["default"]
     type: Optional[str] = None
-    formats: List[str] = field(default_factory=list)
+    formats: list[str] = field(default_factory=list)
     order: int = 0
     has_site: bool = False
     site_path: Optional[Path] = None
@@ -85,11 +84,79 @@ def get_jinja_env() -> Environment:
     )
 
 
+def _load_sub_manifest(source_path: Path) -> Optional[Manifest]:
+    """Load manifest from a source path, returning None on error."""
+    try:
+        return load_manifest(source_path)
+    except (ValueError, OSError, UnicodeDecodeError):
+        # ValueError: invalid manifest format/content
+        # OSError: file system errors
+        # UnicodeDecodeError: invalid UTF-8
+        return None
+
+
+def _get_site_info(source_path: Path) -> tuple[bool, Optional[Path]]:
+    """Check for existing site and return (has_site, site_path)."""
+    site_dir = source_path / "site"
+    if site_dir.exists() and (site_dir / "index.html").exists():
+        return True, site_dir
+    return False, None
+
+
+def _build_source_info(
+    source_path: Path,
+    compliance_result: "ComplianceResult",
+    sub_manifest: Optional[Manifest],
+    name: str,
+    order: int,
+) -> SourceInfo:
+    """
+    Build SourceInfo from a path and its compliance result.
+
+    Args:
+        source_path: Path to the source directory
+        compliance_result: Result from check_compliance()
+        sub_manifest: Optional manifest loaded from the source
+        name: Display name for the source
+        order: Sort order for the source
+
+    Returns:
+        SourceInfo ready for template rendering
+    """
+    # Determine description from manifest or README
+    description = ""
+    if sub_manifest:
+        description = sub_manifest.description
+    elif compliance_result.readme_summary:
+        description = compliance_result.readme_summary
+
+    # Extract icon and type from manifest
+    icon = sub_manifest.icon if sub_manifest else None
+    source_type = sub_manifest.type if sub_manifest else None
+
+    # Check for existing site
+    has_site, site_path = _get_site_info(source_path)
+
+    return SourceInfo(
+        name=name,
+        description=description,
+        path=source_path,
+        url=f"{source_path.name}/index.html",
+        icon=icon,
+        icon_emoji=get_icon_emoji(icon),
+        type=source_type,
+        formats=compliance_result.durable_formats,
+        order=order,
+        has_site=has_site,
+        site_path=site_path,
+    )
+
+
 def discover_sub_sources(
     path: Path,
     manifest: Optional[Manifest] = None,
     deep: bool = False,
-) -> List[SourceInfo]:
+) -> list[SourceInfo]:
     """
     Discover sub-sources in an archive directory.
 
@@ -101,7 +168,7 @@ def discover_sub_sources(
     Returns:
         List of source information
     """
-    sources: List[SourceInfo] = []
+    sources: list[SourceInfo] = []
     seen_paths: set = set()
 
     # If manifest specifies sources, use those first
@@ -116,54 +183,17 @@ def discover_sub_sources(
             if not result.compliant:
                 continue
 
-            # Load sub-manifest if present
-            sub_manifest = None
-            try:
-                sub_manifest = load_manifest(source_path)
-            except Exception:
-                pass
+            sub_manifest = _load_sub_manifest(source_path)
 
-            # Build source info
+            # Resolve name: config > manifest > directory name
             name = source_config.name
             if not name and sub_manifest:
                 name = sub_manifest.name
             if not name:
                 name = source_path.name
 
-            description = ""
-            if sub_manifest:
-                description = sub_manifest.description
-            elif result.readme_summary:
-                description = result.readme_summary
-
-            icon = None
-            if sub_manifest:
-                icon = sub_manifest.icon
-
-            source_type = None
-            if sub_manifest:
-                source_type = sub_manifest.type
-
-            # Check for existing site
-            has_site = False
-            site_path = None
-            site_dir = source_path / "site"
-            if site_dir.exists() and (site_dir / "index.html").exists():
-                has_site = True
-                site_path = site_dir
-
-            sources.append(SourceInfo(
-                name=name,
-                description=description,
-                path=source_path,
-                url=f"{source_path.name}/index.html",
-                icon=icon,
-                icon_emoji=get_icon_emoji(icon),
-                type=source_type,
-                formats=result.durable_formats,
-                order=source_config.order or 0,
-                has_site=has_site,
-                site_path=site_path,
+            sources.append(_build_source_info(
+                source_path, result, sub_manifest, name, source_config.order or 0
             ))
             seen_paths.add(source_path)
 
@@ -183,49 +213,17 @@ def discover_sub_sources(
         if not result.compliant:
             continue
 
-        # Load sub-manifest if present
-        sub_manifest = None
-        try:
-            sub_manifest = load_manifest(item)
-        except Exception:
-            pass
+        sub_manifest = _load_sub_manifest(item)
 
         # Skip if not browsable
         if sub_manifest and not sub_manifest.browsable:
             continue
 
+        # Resolve name and order from manifest or use defaults
         name = sub_manifest.name if sub_manifest else item.name
-        description = ""
-        if sub_manifest:
-            description = sub_manifest.description
-        elif result.readme_summary:
-            description = result.readme_summary
-
-        icon = sub_manifest.icon if sub_manifest else None
-        source_type = sub_manifest.type if sub_manifest else None
         order = sub_manifest.order if sub_manifest and sub_manifest.order is not None else 100
 
-        # Check for existing site
-        has_site = False
-        site_path = None
-        site_dir = item / "site"
-        if site_dir.exists() and (site_dir / "index.html").exists():
-            has_site = True
-            site_path = site_dir
-
-        sources.append(SourceInfo(
-            name=name,
-            description=description,
-            path=item,
-            url=f"{item.name}/index.html",
-            icon=icon,
-            icon_emoji=get_icon_emoji(icon),
-            type=source_type,
-            formats=result.durable_formats,
-            order=order,
-            has_site=has_site,
-            site_path=site_path,
-        ))
+        sources.append(_build_source_info(item, result, sub_manifest, name, order))
 
     # Sort by order (None values sort last)
     sources.sort(key=lambda s: (s.order is None, s.order or 0))
@@ -260,7 +258,9 @@ def build_source_page(
             # Convert markdown to HTML (basic conversion)
             content = readme_path.read_text(encoding="utf-8")
             readme_html = markdown_to_html(content)
-        except Exception:
+        except (OSError, UnicodeDecodeError):
+            # OSError: file system errors (e.g., file disappeared)
+            # UnicodeDecodeError: invalid UTF-8 encoding
             pass
 
     # Determine site URL
@@ -351,10 +351,7 @@ def build_site(
     sources = discover_sub_sources(path, manifest, deep)
 
     # Set output directory
-    if output:
-        output_path = Path(output).resolve()
-    else:
-        output_path = path / "site"
+    output_path = Path(output).resolve() if output else path / "site"
 
     # Create output directory
     output_path.mkdir(parents=True, exist_ok=True)
@@ -404,4 +401,6 @@ def markdown_to_html(content: str) -> str:
         HTML content with fenced code blocks and tables supported
     """
     import markdown
-    return markdown.markdown(content, extensions=["fenced_code", "tables"])
+
+    result: str = markdown.markdown(content, extensions=["fenced_code", "tables"])
+    return result

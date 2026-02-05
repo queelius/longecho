@@ -15,13 +15,13 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 from . import __version__
-from .checker import check_compliance
-from .discovery import discover_sources, search_sources, get_source_info
 from .build import build_site
+from .checker import check_compliance
+from .discovery import discover_sources, get_source_info, search_sources
 from .serve import serve_archive
 
 app = typer.Typer(

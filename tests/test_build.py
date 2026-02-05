@@ -11,7 +11,6 @@ from longecho.build import (
     discover_sub_sources,
     get_icon_emoji,
     markdown_to_html,
-    escape_html,
     BuildResult,
     SourceInfo,
     ICON_EMOJI_MAP,
@@ -32,18 +31,6 @@ class TestGetIconEmoji:
 
     def test_none_returns_default(self):
         assert get_icon_emoji(None) == ICON_EMOJI_MAP["default"]
-
-
-class TestEscapeHtml:
-    """Tests for escape_html function."""
-
-    def test_escapes_special_chars(self):
-        assert escape_html("<script>") == "&lt;script&gt;"
-        assert escape_html("A & B") == "A &amp; B"
-        assert escape_html('"quoted"') == "&quot;quoted&quot;"
-
-    def test_preserves_normal_text(self):
-        assert escape_html("Hello World") == "Hello World"
 
 
 class TestMarkdownToHtml:

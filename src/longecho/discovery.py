@@ -16,12 +16,12 @@ Example:
     ...     print(f"{source.path}: {source.readme_summary}")
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Iterator
+from typing import Optional
 
 from .checker import check_compliance, find_readme
-
 
 # Directories to skip during discovery
 SKIP_DIRECTORIES = {
@@ -42,8 +42,8 @@ class EchoSource:
     path: Path
     readme_path: Path
     readme_summary: Optional[str] = None
-    formats: List[str] = field(default_factory=list)
-    durable_formats: List[str] = field(default_factory=list)
+    formats: list[str] = field(default_factory=list)
+    durable_formats: list[str] = field(default_factory=list)
 
     def __str__(self) -> str:
         summary = self.readme_summary or "No description"
@@ -66,9 +66,7 @@ def should_skip_directory(name: str) -> bool:
         return True
     if name in SKIP_DIRECTORIES:
         return True
-    if name.endswith(".egg-info"):
-        return True
-    return False
+    return bool(name.endswith(".egg-info"))
 
 
 def discover_sources(
@@ -161,7 +159,9 @@ def search_sources(
             content = source.readme_path.read_text(encoding="utf-8")
             if query_lower in content.lower():
                 yield source
-        except Exception:
+        except (OSError, UnicodeDecodeError):
+            # OSError: file system errors (e.g., file disappeared)
+            # UnicodeDecodeError: invalid UTF-8 encoding
             pass
 
 

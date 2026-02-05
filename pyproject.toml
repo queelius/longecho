@@ -37,6 +37,8 @@ dev = [
     "black>=23.0.0",
     "flake8>=6.0.0",
     "mypy>=1.0.0",
+    "ruff>=0.4.0",
+    "types-Markdown>=3.0.0",
 ]
 docs = [
     "mkdocs>=1.5.0",
@@ -79,8 +81,39 @@ target-version = ["py39"]
 python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
+disallow_untyped_defs = false  # Gradual typing
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_optional = true
+no_implicit_optional = true
+
+# Per-module overrides for optional dependencies
+[[tool.mypy.overrides]]
+module = ["yaml", "jsonschema"]
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = ["yaml"]
-ignore_missing_imports = true
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in argument default (Typer standard pattern)
+    "SIM102", # nested if (sometimes more readable)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["longecho"]
