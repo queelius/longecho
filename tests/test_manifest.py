@@ -1,303 +1,161 @@
-"""
-Tests for the ECHO manifest module.
-"""
+"""Tests for simplified ECHO manifest handling."""
 
-import json
 import pytest
 from pathlib import Path
-
-from longecho.manifest import (
-    find_manifest,
-    load_manifest_data,
-    validate_manifest_data,
-    load_manifest,
-    create_minimal_manifest,
-    save_manifest,
-    Manifest,
-    SourceConfig,
-)
-
-
-class TestFindManifest:
-    """Tests for find_manifest function."""
-
-    def test_finds_manifest_json(self, temp_dir):
-        manifest = temp_dir / "manifest.json"
-        manifest.write_text('{"version": "1.0"}')
-
-        result = find_manifest(temp_dir)
-        assert result == manifest
-
-    def test_finds_manifest_yaml(self, temp_dir):
-        manifest = temp_dir / "manifest.yaml"
-        manifest.write_text("version: '1.0'")
-
-        result = find_manifest(temp_dir)
-        assert result == manifest
-
-    def test_prefers_json_over_yaml(self, temp_dir):
-        (temp_dir / "manifest.json").write_text('{"version": "1.0"}')
-        (temp_dir / "manifest.yaml").write_text("version: '1.0'")
-
-        result = find_manifest(temp_dir)
-        assert result.name == "manifest.json"
-
-    def test_returns_none_if_missing(self, temp_dir):
-        result = find_manifest(temp_dir)
-        assert result is None
-
-
-class TestLoadManifestData:
-    """Tests for load_manifest_data function."""
-
-    def test_loads_json(self, temp_dir):
-        manifest = temp_dir / "manifest.json"
-        manifest.write_text('{"version": "1.0", "name": "Test", "description": "A test"}')
-
-        data = load_manifest_data(manifest)
-        assert data["version"] == "1.0"
-        assert data["name"] == "Test"
-
-    def test_invalid_json_raises(self, temp_dir):
-        manifest = temp_dir / "manifest.json"
-        manifest.write_text("{invalid json}")
-
-        with pytest.raises(ValueError, match="Invalid JSON"):
-            load_manifest_data(manifest)
-
-
-class TestValidateManifestData:
-    """Tests for validate_manifest_data function."""
-
-    def test_valid_minimal_manifest(self):
-        data = {
-            "version": "1.0",
-            "name": "Test",
-            "description": "A test archive"
-        }
-        errors = validate_manifest_data(data)
-        assert len(errors) == 0
-
-    def test_missing_version(self):
-        data = {"name": "Test", "description": "A test"}
-        errors = validate_manifest_data(data)
-        assert any("version" in e for e in errors)
-
-    def test_missing_name(self):
-        data = {"version": "1.0", "description": "A test"}
-        errors = validate_manifest_data(data)
-        assert any("name" in e for e in errors)
-
-    def test_missing_description(self):
-        data = {"version": "1.0", "name": "Test"}
-        errors = validate_manifest_data(data)
-        assert any("description" in e for e in errors)
-
-    def test_invalid_version(self):
-        data = {"version": "2.0", "name": "Test", "description": "A test"}
-        errors = validate_manifest_data(data)
-        assert any("version" in e.lower() for e in errors)
-
-    def test_invalid_type(self):
-        data = {
-            "version": "1.0",
-            "name": "Test",
-            "description": "A test",
-            "type": "invalid"
-        }
-        errors = validate_manifest_data(data)
-        assert any("type" in e.lower() for e in errors)
-
-    def test_valid_type(self):
-        data = {
-            "version": "1.0",
-            "name": "Test",
-            "description": "A test",
-            "type": "database"
-        }
-        errors = validate_manifest_data(data)
-        assert not any("type" in e.lower() for e in errors)
-
-    def test_sources_must_be_array(self):
-        data = {
-            "version": "1.0",
-            "name": "Test",
-            "description": "A test",
-            "sources": "not an array"
-        }
-        errors = validate_manifest_data(data)
-        assert any("sources" in e.lower() for e in errors)
-
-    def test_sources_require_path(self):
-        data = {
-            "version": "1.0",
-            "name": "Test",
-            "description": "A test",
-            "sources": [{"order": 1}]
-        }
-        errors = validate_manifest_data(data)
-        assert any("path" in e.lower() for e in errors)
-
-
-class TestLoadManifest:
-    """Tests for load_manifest function."""
-
-    def test_loads_valid_manifest(self, temp_dir):
-        manifest = temp_dir / "manifest.json"
-        manifest.write_text(json.dumps({
-            "version": "1.0",
-            "name": "Test Archive",
-            "description": "A test archive"
-        }))
-
-        result = load_manifest(temp_dir)
-        assert result is not None
-        assert result.name == "Test Archive"
-        assert result.version == "1.0"
-
-    def test_returns_none_if_no_manifest(self, temp_dir):
-        result = load_manifest(temp_dir)
-        assert result is None
-
-    def test_raises_on_invalid_manifest(self, temp_dir):
-        manifest = temp_dir / "manifest.json"
-        manifest.write_text('{"version": "1.0"}')  # Missing name and description
-
-        with pytest.raises(ValueError):
-            load_manifest(temp_dir)
-
-    def test_loads_with_sources(self, temp_dir):
-        manifest = temp_dir / "manifest.json"
-        manifest.write_text(json.dumps({
-            "version": "1.0",
-            "name": "Test",
-            "description": "Test",
-            "sources": [
-                {"path": "source1/", "order": 1},
-                {"path": "source2/", "order": 2, "browsable": False}
-            ]
-        }))
-
-        result = load_manifest(temp_dir)
-        assert len(result.sources) == 2
-        assert result.sources[0].path == "source1/"
-        assert result.sources[0].order == 1
-        assert result.sources[1].browsable is False
-
-
-class TestManifest:
-    """Tests for Manifest dataclass."""
-
-    def test_from_dict(self):
-        data = {
-            "version": "1.0",
-            "name": "Test",
-            "description": "A test",
-            "type": "database",
-            "browsable": True,
-            "icon": "chat"
-        }
-        manifest = Manifest.from_dict(data)
-        assert manifest.name == "Test"
-        assert manifest.type == "database"
-        assert manifest.icon == "chat"
-
-    def test_to_dict(self):
-        manifest = Manifest(
-            version="1.0",
-            name="Test",
-            description="A test",
-            type="database",
-            icon="chat"
-        )
-        data = manifest.to_dict()
-        assert data["version"] == "1.0"
-        assert data["name"] == "Test"
-        assert data["type"] == "database"
-
-    def test_to_dict_omits_none(self):
-        manifest = Manifest(
-            version="1.0",
-            name="Test",
-            description="A test"
-        )
-        data = manifest.to_dict()
-        assert "type" not in data
-        assert "icon" not in data
-
-    def test_browsable_defaults_to_true(self):
-        manifest = Manifest(
-            version="1.0",
-            name="Test",
-            description="A test"
-        )
-        assert manifest.browsable is True
+from longecho.manifest import Manifest, SourceConfig, find_manifest, load_manifest, save_manifest
 
 
 class TestSourceConfig:
-    """Tests for SourceConfig dataclass."""
+    def test_from_string(self):
+        sc = SourceConfig(path="conversations/")
+        assert sc.path == "conversations/"
+        assert sc.name is None
+        assert sc.icon is None
+        assert sc.order is None
+
+    def test_full(self):
+        sc = SourceConfig(path="data/", name="My Data", icon="\U0001F4CA", order=1)
+        assert sc.name == "My Data"
+        assert sc.icon == "\U0001F4CA"
+
+
+class TestManifest:
+    def test_empty_manifest(self):
+        m = Manifest()
+        assert m.name is None
+        assert m.description is None
+        assert m.sources == []
+
+    def test_full_manifest(self):
+        m = Manifest(
+            name="Archive",
+            description="My archive",
+            icon="\U0001F4E6",
+            sources=[SourceConfig(path="data/")],
+        )
+        assert m.name == "Archive"
+        assert len(m.sources) == 1
 
     def test_from_dict_minimal(self):
-        data = {"path": "source/"}
-        config = SourceConfig.from_dict(data)
-        assert config.path == "source/"
-        assert config.order is None
+        m = Manifest.from_dict({})
+        assert m.name is None
+        assert m.sources == []
 
-    def test_from_dict_full(self):
-        data = {
-            "path": "source/",
-            "order": 1,
-            "browsable": False,
-            "name": "Custom Name"
-        }
-        config = SourceConfig.from_dict(data)
-        assert config.path == "source/"
-        assert config.order == 1
-        assert config.browsable is False
-        assert config.name == "Custom Name"
+    def test_from_dict_with_sources(self):
+        m = Manifest.from_dict({
+            "name": "Test",
+            "sources": [
+                "conversations/",
+                {"path": "bookmarks/", "name": "Links", "icon": "\U0001F516"},
+            ]
+        })
+        assert m.name == "Test"
+        assert len(m.sources) == 2
+        assert m.sources[0].path == "conversations/"
+        assert m.sources[0].name is None
+        assert m.sources[1].path == "bookmarks/"
+        assert m.sources[1].name == "Links"
+        assert m.sources[1].icon == "\U0001F516"
+
+    def test_from_dict_ignores_unknown_fields(self):
+        m = Manifest.from_dict({"name": "Test", "version": "1.0", "type": "database"})
+        assert m.name == "Test"
+
+    def test_to_dict_omits_none(self):
+        m = Manifest(name="Test")
+        d = m.to_dict()
+        assert d == {"name": "Test"}
+        assert "description" not in d
+        assert "sources" not in d
+
+    def test_to_dict_full(self):
+        m = Manifest(
+            name="Archive",
+            description="Desc",
+            icon="\U0001F4E6",
+            sources=[SourceConfig(path="a/"), SourceConfig(path="b/", name="B")],
+        )
+        d = m.to_dict()
+        assert d["name"] == "Archive"
+        assert d["sources"][0] == "a/"
+        assert d["sources"][1] == {"path": "b/", "name": "B"}
 
 
-class TestCreateMinimalManifest:
-    """Tests for create_minimal_manifest function."""
+class TestFindManifest:
+    def test_finds_yaml(self, tmp_path):
+        (tmp_path / "manifest.yaml").write_text("name: Test")
+        assert find_manifest(tmp_path) == tmp_path / "manifest.yaml"
 
-    def test_creates_manifest(self):
-        manifest = create_minimal_manifest("Test", "A test archive")
-        assert manifest.version == "1.0"
-        assert manifest.name == "Test"
-        assert manifest.description == "A test archive"
+    def test_finds_yml(self, tmp_path):
+        (tmp_path / "manifest.yml").write_text("name: Test")
+        assert find_manifest(tmp_path) == tmp_path / "manifest.yml"
+
+    def test_prefers_yaml_over_yml(self, tmp_path):
+        (tmp_path / "manifest.yaml").write_text("name: A")
+        (tmp_path / "manifest.yml").write_text("name: B")
+        assert find_manifest(tmp_path) == tmp_path / "manifest.yaml"
+
+    def test_returns_none(self, tmp_path):
+        assert find_manifest(tmp_path) is None
+
+    def test_ignores_json(self, tmp_path):
+        (tmp_path / "manifest.json").write_text('{"name": "Test"}')
+        assert find_manifest(tmp_path) is None
+
+
+class TestLoadManifest:
+    def test_loads_yaml(self, tmp_path):
+        (tmp_path / "manifest.yaml").write_text("name: Test\ndescription: A test")
+        m = load_manifest(tmp_path)
+        assert m is not None
+        assert m.name == "Test"
+
+    def test_loads_mixed_sources(self, tmp_path):
+        content = "sources:\n  - conversations/\n  - path: bookmarks/\n    name: Links"
+        (tmp_path / "manifest.yaml").write_text(content)
+        m = load_manifest(tmp_path)
+        assert len(m.sources) == 2
+        assert m.sources[0].path == "conversations/"
+        assert m.sources[1].name == "Links"
+
+    def test_returns_none_if_missing(self, tmp_path):
+        assert load_manifest(tmp_path) is None
+
+    def test_invalid_yaml_raises(self, tmp_path):
+        (tmp_path / "manifest.yaml").write_text(": : invalid: [")
+        with pytest.raises(ValueError):
+            load_manifest(tmp_path)
+
+    def test_non_dict_raises(self, tmp_path):
+        (tmp_path / "manifest.yaml").write_text("- just\n- a\n- list")
+        with pytest.raises(ValueError):
+            load_manifest(tmp_path)
+
+    def test_empty_manifest_loads(self, tmp_path):
+        (tmp_path / "manifest.yaml").write_text("")
+        # Empty YAML returns None, which is not a dict
+        with pytest.raises(ValueError):
+            load_manifest(tmp_path)
 
 
 class TestSaveManifest:
-    """Tests for save_manifest function."""
-
-    def test_save_json(self, temp_dir):
-        manifest = Manifest(
-            version="1.0",
-            name="Test",
-            description="A test"
-        )
-        path = save_manifest(manifest, temp_dir, format="json")
-
-        assert path.name == "manifest.json"
+    def test_saves_yaml(self, tmp_path):
+        m = Manifest(name="Test", description="Desc")
+        path = save_manifest(m, tmp_path)
+        assert path == tmp_path / "manifest.yaml"
         assert path.exists()
-
-        content = json.loads(path.read_text())
-        assert content["name"] == "Test"
-
-    def test_save_creates_valid_json(self, temp_dir):
-        manifest = Manifest(
-            version="1.0",
-            name="Test",
-            description="A test",
-            type="database",
-            sources=[
-                SourceConfig(path="source1/", order=1),
-                SourceConfig(path="source2/", browsable=False)
-            ]
-        )
-        path = save_manifest(manifest, temp_dir)
-
-        # Reload and verify
-        loaded = load_manifest(temp_dir)
+        loaded = load_manifest(tmp_path)
         assert loaded.name == "Test"
+
+    def test_roundtrip_with_sources(self, tmp_path):
+        m = Manifest(
+            name="Archive",
+            sources=[
+                SourceConfig(path="a/"),
+                SourceConfig(path="b/", name="B", icon="\U0001F4DA"),
+            ],
+        )
+        save_manifest(m, tmp_path)
+        loaded = load_manifest(tmp_path)
         assert len(loaded.sources) == 2
+        assert loaded.sources[1].name == "B"
