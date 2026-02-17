@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
 # Durable formats recognized by ECHO
 DURABLE_EXTENSIONS: set[str] = {
     # Structured data
@@ -52,6 +54,89 @@ EXCLUDE_PATTERNS: set[str] = {
 # Configuration constants
 DEFAULT_FORMAT_SCAN_DEPTH: int = 2  # Max depth for format detection
 MAX_README_SUMMARY_LENGTH: int = 500  # Max characters for README summary
+
+
+@dataclass
+class Readme:
+    """A README parsed into its constituent parts."""
+
+    frontmatter: Optional[dict]
+    body: str
+    title: Optional[str]
+    summary: Optional[str]
+
+
+def split_frontmatter(content: str) -> tuple[Optional[dict], str]:
+    """Split YAML frontmatter from markdown content.
+
+    Frontmatter must start at the very beginning of the content,
+    delimited by --- lines.
+
+    Returns:
+        (frontmatter dict or None, remaining content)
+    """
+    if not content.startswith("---"):
+        return None, content
+
+    lines = content.split("\n")
+    # Find closing ---
+    for i, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            yaml_content = "\n".join(lines[1:i])
+            body = "\n".join(lines[i + 1 :])
+            try:
+                parsed = yaml.safe_load(yaml_content)
+                if isinstance(parsed, dict):
+                    return parsed, body
+                return None, body
+            except yaml.YAMLError:
+                return None, body
+
+    # No closing delimiter found
+    return None, content
+
+
+def parse_readme(readme_path: Path) -> Optional[Readme]:
+    """Parse a README into frontmatter, title, and summary.
+
+    Returns None if the file can't be read.
+    """
+    try:
+        content = readme_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    frontmatter, body = split_frontmatter(content)
+
+    title = None
+    summary_lines: list[str] = []
+    in_paragraph = False
+
+    for line in body.split("\n"):
+        stripped = line.strip()
+
+        # Extract first # heading as title
+        if stripped.startswith("# ") and title is None:
+            title = stripped[2:].strip()
+            continue
+
+        # Skip other headings
+        if stripped.startswith("#"):
+            if summary_lines:
+                break  # hit next section, stop collecting
+            continue
+
+        # Empty line ends paragraph
+        if not stripped:
+            if in_paragraph:
+                break
+            continue
+
+        in_paragraph = True
+        summary_lines.append(stripped)
+
+    summary = " ".join(summary_lines)[:MAX_README_SUMMARY_LENGTH] if summary_lines else None
+    return Readme(frontmatter=frontmatter, body=body, title=title, summary=summary)
 
 
 @dataclass
