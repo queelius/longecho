@@ -120,7 +120,7 @@ longecho build ~/my-archive/
 
 The build command:
 
-- Reads `manifest.json` or `manifest.yaml` if present
+- Reads `manifest.yaml` if present
 - Auto-discovers sub-archives (manifest overrides auto-discovery)
 - For sources with `site/`: links by default, copies with `--bundle`
 - Generates index pages with navigation between sources
@@ -131,7 +131,6 @@ The build command:
 | Flag | Description |
 |------|-------------|
 | `--bundle` | Copy all sub-sites into unified site (portable) |
-| `--deep` | Aggressive discovery mode |
 | `--output` | Custom output directory (default: `site/`) |
 
 ### Serve Archive
@@ -156,6 +155,76 @@ The serve command:
 
 ---
 
+## Archive Conventions
+
+These are optional conventions that longecho understands. An ECHO archive works without any of them.
+
+### The site/ Directory
+
+A `site/` directory containing `index.html` provides a static, browsable representation. This is a convenience layer — raw data must still exist alongside it.
+
+### The Manifest
+
+A `manifest.yaml` at the archive root provides optional machine-readable metadata. All fields are optional.
+
+```yaml
+name: My Archive
+description: Personal data archive
+icon: "\U0001F4E6"
+sources:
+  - conversations/
+  - path: bookmarks/
+    name: My Bookmarks
+    icon: "\U0001F516"
+```
+
+### README Frontmatter
+
+READMEs can include YAML frontmatter for structured metadata:
+
+```markdown
+---
+title: Conversation Archive
+description: AI conversation history
+icon: "\U0001F4AC"
+---
+
+# Conversation Archive
+
+Exported conversations from ChatGPT, Claude, etc.
+```
+
+longecho reads frontmatter for name, description, and icon when no manifest is present.
+
+### Hierarchical Archives
+
+Archives can contain other ECHO-compliant archives as subdirectories:
+
+```
+my-archive/
+├── README.md
+├── manifest.yaml
+├── conversations/
+│   ├── README.md
+│   └── data.db
+├── bookmarks/
+│   ├── README.md
+│   └── bookmarks.jsonl
+└── site/
+    └── index.html
+```
+
+### Name/Description Resolution
+
+longecho resolves names and descriptions by cascade:
+
+1. Manifest field (if manifest.yaml exists)
+2. README frontmatter (`title`, `description`)
+3. README heading and first paragraph
+4. Directory name
+
+---
+
 ## Boundaries
 
 **longecho unifies, but doesn't orchestrate toolkits.** Each toolkit (ctk, btk, etc.) exports its own ECHO-compliant archive. longecho's `build` command combines these into a unified browsable site, but doesn't invoke or manage the toolkits themselves.
@@ -174,7 +243,7 @@ ctk has its own README explaining its format. btk has its own README. longecho c
 
 ### 2. Toolkits Define Their Own Interfaces
 
-persona-tk defines what input it accepts. stone-tk discovers sources by reading READMEs. There's no central specification that bridges them.
+Each toolkit defines what input it accepts and what it exports. There's no central specification that bridges them.
 
 ### 3. READMEs Are the Interface
 
@@ -189,9 +258,6 @@ An ECHO archive works without longecho. longecho adds convenience (site generati
 ## Related
 
 - [ECHO.md](ECHO.md) — The ECHO philosophy
-- [MANIFEST-SCHEMA.md](MANIFEST-SCHEMA.md) — Manifest format specification
-- [PERSONA-TK.md](PERSONA-TK.md) — Persona toolkit (standalone)
-- [STONE-TK.md](STONE-TK.md) — Plain text distillation toolkit (standalone)
 - [TOOLKIT-ECOSYSTEM.md](TOOLKIT-ECOSYSTEM.md) — List of existing toolkits
 
 ---

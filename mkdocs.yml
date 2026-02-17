@@ -39,12 +39,7 @@ nav:
   - Home: index.md
   - ECHO Philosophy: ECHO.md
   - longecho Tool: LONGECHO.md
-  - Manifest Schema: MANIFEST-SCHEMA.md
-  - Toolkits:
-    - Persona Toolkit: PERSONA-TK.md
-    - Stone Toolkit: STONE-TK.md
-    - Ecosystem: TOOLKIT-ECOSYSTEM.md
-  - Design Notes: INTERVIEW-INSIGHTS.md
+  - Toolkit Ecosystem: TOOLKIT-ECOSYSTEM.md
 
 extra:
   social:

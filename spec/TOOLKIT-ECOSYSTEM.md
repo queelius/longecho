@@ -13,8 +13,6 @@ This document briefly lists the toolkits that exist alongside longecho. Each too
 | ebk | Ebooks | Exists |
 | mtk | Mail | Exists |
 | repoindex | Git repos | Exists |
-| persona-tk | Persona generation | Spec only |
-| stone-tk | Plain text distillation | Spec only |
 
 Markdown-based sources (Hugo, Jekyll, Obsidian, etc.) are inherently ECHO-compliant.
 
@@ -24,7 +22,7 @@ Markdown-based sources (Hugo, Jekyll, Obsidian, etc.) are inherently ECHO-compli
 
 Each toolkit is self-contained:
 
-- **Defines its own input/output formats** — persona-tk specifies what it accepts; ctk specifies what it exports
+- **Defines its own input/output formats** — each toolkit specifies what it accepts and exports
 - **Works without longecho** — Toolkits are useful on their own
 - **Documented in its own repo** — Each toolkit's README explains how to use it
 
@@ -69,6 +67,4 @@ No schema.json, no manifest, no version numbers. Just enough for someone to get 
 ## Related
 
 - [ECHO.md](ECHO.md) — ECHO philosophy
-- [LONGECHO.md](LONGECHO.md) — ECHO compliance validator
-- [PERSONA-TK.md](PERSONA-TK.md) — Persona toolkit
-- [STONE-TK.md](STONE-TK.md) — Plain text distillation toolkit
+- [LONGECHO.md](LONGECHO.md) — longecho tool specification

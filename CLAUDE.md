@@ -52,13 +52,12 @@ src/longecho/
 
 ```
 spec/
+├── index.md             # Documentation index
 ├── ECHO.md              # ECHO philosophy (standalone)
-├── LONGECHO.md          # Tool specification
-├── MANIFEST-SCHEMA.md   # Manifest format spec
-├── PERSONA-TK.md        # Persona toolkit spec
-├── STONE-TK.md          # Stone toolkit spec
-├── TOOLKIT-ECOSYSTEM.md # List of toolkits
-└── INTERVIEW-INSIGHTS.md # Design decisions
+├── LONGECHO.md          # Tool specification + archive conventions
+└── TOOLKIT-ECOSYSTEM.md # List of toolkits
+
+DESIGN-NOTES.md          # Design decisions (project root)
 ```
 
 ## Development

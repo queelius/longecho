@@ -32,22 +32,12 @@ longecho serve ~/my-archive/
 | Document | Description |
 |----------|-------------|
 | [ECHO Philosophy](ECHO.md) | Core principles for durable archives |
-| [longecho Tool](LONGECHO.md) | CLI commands and usage |
-| [Manifest Schema](MANIFEST-SCHEMA.md) | Machine-readable metadata format |
-
-## Toolkits
-
-ECHO-compliant toolkits that work with longecho:
-
-| Toolkit | Purpose |
-|---------|---------|
-| [Persona Toolkit](PERSONA-TK.md) | Persona synthesis from archives |
-| [Stone Toolkit](STONE-TK.md) | Plain text distillation |
-| [Ecosystem](TOOLKIT-ECOSYSTEM.md) | Full list of toolkits |
+| [longecho Tool](LONGECHO.md) | CLI commands, manifest spec, site conventions |
+| [Toolkit Ecosystem](TOOLKIT-ECOSYSTEM.md) | List of existing toolkits |
 
 ## Design Notes
 
-See [Interview Insights](INTERVIEW-INSIGHTS.md) for design decisions and rationale.
+See [DESIGN-NOTES.md](../DESIGN-NOTES.md) for design decisions and rationale.
 
 ---
 
