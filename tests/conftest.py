@@ -107,7 +107,7 @@ def nested_echo_sources(temp_dir):
 @pytest.fixture
 def echo_archive_with_manifest(temp_dir):
     """Create an ECHO archive with a manifest file."""
-    import json
+    import yaml
 
     # Create main README
     (temp_dir / "README.md").write_text(
@@ -116,14 +116,13 @@ def echo_archive_with_manifest(temp_dir):
 
     # Create manifest
     manifest_data = {
-        "version": "1.0",
         "name": "Test Archive",
         "description": "A comprehensive test archive",
         "sources": [
             {"path": "data/", "order": 1}
         ]
     }
-    (temp_dir / "manifest.json").write_text(json.dumps(manifest_data, indent=2))
+    (temp_dir / "manifest.yaml").write_text(yaml.dump(manifest_data, default_flow_style=False))
 
     # Create data source
     data_dir = temp_dir / "data"
