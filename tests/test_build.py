@@ -2,35 +2,18 @@
 Tests for the ECHO site builder.
 """
 
-import json
 import pytest
+import yaml
 from pathlib import Path
 
 from longecho.build import (
     build_site,
     discover_sub_sources,
-    get_icon_emoji,
     markdown_to_html,
     BuildResult,
-    SourceInfo,
-    ICON_EMOJI_MAP,
 )
+from longecho.checker import EchoSource
 from longecho.manifest import Manifest, SourceConfig
-
-
-class TestGetIconEmoji:
-    """Tests for get_icon_emoji function."""
-
-    def test_known_icons(self):
-        assert get_icon_emoji("chat") == ICON_EMOJI_MAP["chat"]
-        assert get_icon_emoji("bookmark") == ICON_EMOJI_MAP["bookmark"]
-        assert get_icon_emoji("database") == ICON_EMOJI_MAP["database"]
-
-    def test_unknown_icon_returns_default(self):
-        assert get_icon_emoji("unknown") == ICON_EMOJI_MAP["default"]
-
-    def test_none_returns_default(self):
-        assert get_icon_emoji(None) == ICON_EMOJI_MAP["default"]
 
 
 class TestMarkdownToHtml:
@@ -69,7 +52,7 @@ class TestDiscoverSubSources:
 
         sources = discover_sub_sources(temp_dir)
         assert len(sources) == 1
-        assert sources[0].name == "source1"
+        assert sources[0].name == "Source 1"
 
     def test_ignores_non_echo_dirs(self, temp_dir):
         # Create a non-ECHO directory (no README)
@@ -89,9 +72,6 @@ class TestDiscoverSubSources:
 
         # Create manifest
         manifest = Manifest(
-            version="1.0",
-            name="Test",
-            description="Test",
             sources=[SourceConfig(path="source1/", order=1, name="Custom Name")]
         )
 
@@ -108,9 +88,6 @@ class TestDiscoverSubSources:
             (d / "data.db").touch()
 
         manifest = Manifest(
-            version="1.0",
-            name="Test",
-            description="Test",
             sources=[
                 SourceConfig(path="source_c/", order=1),
                 SourceConfig(path="source_a/", order=2),
@@ -214,22 +191,6 @@ class TestBuildResult:
         assert result.error == "Something went wrong"
 
 
-class TestSourceInfo:
-    """Tests for SourceInfo dataclass."""
-
-    def test_default_values(self):
-        info = SourceInfo(
-            name="Test",
-            description="A test",
-            path=Path("/tmp/test"),
-            url="test/index.html"
-        )
-        assert info.icon is None
-        assert info.icon_emoji == ICON_EMOJI_MAP["default"]
-        assert info.order == 0
-        assert info.has_site is False
-
-
 @pytest.fixture
 def echo_compliant_with_sources(temp_dir):
     """Create an ECHO archive with sub-sources."""
@@ -242,41 +203,36 @@ def echo_compliant_with_sources(temp_dir):
     (temp_dir / "index.json").write_text("[]")
 
     # Create manifest
-    (temp_dir / "manifest.json").write_text(json.dumps({
-        "version": "1.0",
+    (temp_dir / "manifest.yaml").write_text(yaml.dump({
         "name": "Test Archive",
         "description": "A test archive",
         "sources": [
             {"path": "conversations/", "order": 1},
             {"path": "bookmarks/", "order": 2}
         ]
-    }))
+    }, default_flow_style=False))
 
     # Create conversations source
     conv_dir = temp_dir / "conversations"
     conv_dir.mkdir()
     (conv_dir / "README.md").write_text("# Conversations\n\nChat history.")
     (conv_dir / "conversations.db").touch()
-    (conv_dir / "manifest.json").write_text(json.dumps({
-        "version": "1.0",
+    (conv_dir / "manifest.yaml").write_text(yaml.dump({
         "name": "Conversations",
         "description": "AI conversation history",
-        "type": "database",
-        "icon": "chat"
-    }))
+        "icon": "\U0001F4AC"
+    }, default_flow_style=False))
 
     # Create bookmarks source
     btk_dir = temp_dir / "bookmarks"
     btk_dir.mkdir()
     (btk_dir / "README.md").write_text("# Bookmarks\n\nSaved links.")
     (btk_dir / "bookmarks.jsonl").write_text("")
-    (btk_dir / "manifest.json").write_text(json.dumps({
-        "version": "1.0",
+    (btk_dir / "manifest.yaml").write_text(yaml.dump({
         "name": "Bookmarks",
         "description": "Personal bookmarks",
-        "type": "database",
-        "icon": "bookmark"
-    }))
+        "icon": "\U0001F516"
+    }, default_flow_style=False))
 
     return temp_dir
 

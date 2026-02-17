@@ -189,27 +189,19 @@
 
         <header>
             <h1>
-                <span class="icon">{{ icon_emoji }}</span>
+                <span class="icon">{{ icon or '\U0001F4C1' }}</span>
                 {{ name }}
             </h1>
             <p class="description">{{ description }}</p>
         </header>
 
         <main>
-            {% if type or formats %}
+            {% if durable_formats %}
             <div class="metadata">
-                {% if type %}
-                <div class="metadata-row">
-                    <span class="metadata-label">Type</span>
-                    <span class="metadata-value">{{ type }}</span>
-                </div>
-                {% endif %}
-                {% if formats %}
                 <div class="metadata-row">
                     <span class="metadata-label">Formats</span>
-                    <span class="metadata-value">{{ formats | join(', ') }}</span>
+                    <span class="metadata-value">{{ durable_formats | join(', ') }}</span>
                 </div>
-                {% endif %}
                 {% if path %}
                 <div class="metadata-row">
                     <span class="metadata-label">Path</span>

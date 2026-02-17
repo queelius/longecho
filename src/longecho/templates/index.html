@@ -158,18 +158,13 @@
                 {% for source in sources %}
                 <a href="{{ source.url }}" class="source-card">
                     <div class="source-header">
-                        <span class="source-icon">{{ source.icon_emoji }}</span>
+                        <span class="source-icon">{{ source.icon or '\U0001F4C1' }}</span>
                         <h2 class="source-name">{{ source.name }}</h2>
                     </div>
                     <p class="source-description">{{ source.description }}</p>
-                    {% if source.type or source.formats %}
+                    {% if source.durable_formats %}
                     <div class="source-meta">
-                        {% if source.type %}
-                        <span class="meta-item">{{ source.type }}</span>
-                        {% endif %}
-                        {% if source.formats %}
-                        <span class="meta-item">{{ source.formats | join(', ') }}</span>
-                        {% endif %}
+                        <span class="meta-item">{{ source.durable_formats | join(', ') }}</span>
                     </div>
                     {% endif %}
                 </a>
