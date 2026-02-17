@@ -49,8 +49,11 @@ class Manifest:
             if isinstance(s, str):
                 sources.append(SourceConfig(path=s))
             elif isinstance(s, dict):
+                source_path = s.get("path")
+                if not source_path:
+                    continue
                 sources.append(SourceConfig(
-                    path=s["path"],
+                    path=source_path,
                     name=s.get("name"),
                     icon=s.get("icon"),
                     order=s.get("order"),

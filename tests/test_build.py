@@ -1,18 +1,16 @@
-"""
-Tests for the ECHO site builder.
-"""
+"""Tests for the ECHO site builder."""
+
+from pathlib import Path
 
 import pytest
 import yaml
-from pathlib import Path
 
 from longecho.build import (
+    BuildResult,
     build_site,
     discover_sub_sources,
     markdown_to_html,
-    BuildResult,
 )
-from longecho.checker import EchoSource
 from longecho.manifest import Manifest, SourceConfig
 
 
@@ -161,13 +159,10 @@ class TestBuildSite:
         assert result.success is False
         assert "not a directory" in result.error
 
-    def test_builds_with_sources(self, nested_echo_sources):
+    def test_rejects_non_echo_root(self, nested_echo_sources):
+        # nested_echo_sources has no README at root, so build should fail
         result = build_site(nested_echo_sources)
-
-        # nested_echo_sources doesn't have a README at root
-        # Let's check what happens
-        if result.success:
-            assert result.sources_count > 0
+        assert result.success is False
 
 
 class TestBuildResult:
@@ -194,25 +189,17 @@ class TestBuildResult:
 @pytest.fixture
 def echo_compliant_with_sources(temp_dir):
     """Create an ECHO archive with sub-sources."""
-    # Create main README
-    (temp_dir / "README.md").write_text(
-        "# Test Archive\n\nA test archive with multiple sources."
-    )
-
-    # Create a dummy durable file to make the root compliant
-    (temp_dir / "index.json").write_text("[]")
-
-    # Create manifest
+    (temp_dir / "README.md").write_text("# Test Archive\n\nA test archive with multiple sources.")
+    (temp_dir / "index.json").write_text("[]")  # durable file to make root compliant
     (temp_dir / "manifest.yaml").write_text(yaml.dump({
         "name": "Test Archive",
         "description": "A test archive",
         "sources": [
             {"path": "conversations/", "order": 1},
-            {"path": "bookmarks/", "order": 2}
-        ]
+            {"path": "bookmarks/", "order": 2},
+        ],
     }, default_flow_style=False))
 
-    # Create conversations source
     conv_dir = temp_dir / "conversations"
     conv_dir.mkdir()
     (conv_dir / "README.md").write_text("# Conversations\n\nChat history.")
@@ -220,10 +207,9 @@ def echo_compliant_with_sources(temp_dir):
     (conv_dir / "manifest.yaml").write_text(yaml.dump({
         "name": "Conversations",
         "description": "AI conversation history",
-        "icon": "\U0001F4AC"
+        "icon": "\U0001F4AC",
     }, default_flow_style=False))
 
-    # Create bookmarks source
     btk_dir = temp_dir / "bookmarks"
     btk_dir.mkdir()
     (btk_dir / "README.md").write_text("# Bookmarks\n\nSaved links.")
@@ -231,7 +217,7 @@ def echo_compliant_with_sources(temp_dir):
     (btk_dir / "manifest.yaml").write_text(yaml.dump({
         "name": "Bookmarks",
         "description": "Personal bookmarks",
-        "icon": "\U0001F516"
+        "icon": "\U0001F516",
     }, default_flow_style=False))
 
     return temp_dir

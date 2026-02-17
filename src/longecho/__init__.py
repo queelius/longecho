@@ -1,10 +1,4 @@
-"""
-longecho - ECHO philosophy documentation and compliance validator.
-
-ECHO is a philosophy for creating durable personal data archives.
-longecho provides tools to check if directories are ECHO-compliant,
-discover ECHO-compliant sources, and build static sites for archives.
-"""
+"""longecho -- ECHO compliance validator, discovery, and site builder."""
 
 __version__ = "0.2.0"
 
@@ -20,16 +14,16 @@ from .discovery import discover_sources
 from .manifest import Manifest, SourceConfig, load_manifest
 
 __all__ = [
-    "__version__",
-    "check_compliance",
+    "BuildResult",
     "ComplianceResult",
-    "discover_sources",
     "EchoSource",
-    "load_manifest",
     "Manifest",
-    "parse_readme",
     "Readme",
     "SourceConfig",
+    "__version__",
     "build_site",
-    "BuildResult",
+    "check_compliance",
+    "discover_sources",
+    "load_manifest",
+    "parse_readme",
 ]

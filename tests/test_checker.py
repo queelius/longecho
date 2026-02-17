@@ -1,18 +1,14 @@
-"""
-Tests for the ECHO compliance checker.
-"""
+"""Tests for the ECHO compliance checker."""
 
-import pytest
 from pathlib import Path
 
 from longecho.checker import (
-    check_compliance,
-    find_readme,
-    detect_formats,
-    is_durable_format,
     ComplianceResult,
     EchoSource,
-    DURABLE_EXTENSIONS,
+    check_compliance,
+    detect_formats,
+    find_readme,
+    is_durable_format,
 )
 
 
@@ -71,9 +67,7 @@ class TestDetectFormats:
 
         formats = detect_formats(temp_dir)
         assert ".json" in formats
-        # README.md is excluded from format detection
-        assert len([f for f in formats if f == ".md"]) == 0 or \
-               (temp_dir / "notes.md").exists()
+        assert ".md" not in formats  # README.md is excluded
 
     def test_respects_max_depth(self, temp_dir):
         (temp_dir / "level1" / "level2" / "level3").mkdir(parents=True)

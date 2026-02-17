@@ -1,13 +1,8 @@
-"""
-Tests for the longecho CLI.
-"""
+"""Tests for the longecho CLI."""
 
-import pytest
-from pathlib import Path
 from typer.testing import CliRunner
 
 from longecho.cli import app
-
 
 runner = CliRunner()
 

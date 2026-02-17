@@ -1,20 +1,19 @@
-"""
-Tests for the ECHO serve module.
-"""
+"""Tests for the ECHO serve module."""
 
-import pytest
 import socket
 import urllib.request
 from pathlib import Path
 from time import sleep
 
-from longecho.serve import (
-    serve_directory,
-    serve_archive,
-    start_server_background,
-    ServeResult,
-)
+import pytest
+
 from longecho.build import build_site
+from longecho.serve import (
+    ServeResult,
+    serve_archive,
+    serve_directory,
+    start_server_background,
+)
 
 
 def find_free_port():

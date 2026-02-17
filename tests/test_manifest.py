@@ -1,8 +1,14 @@
-"""Tests for simplified ECHO manifest handling."""
+"""Tests for ECHO manifest handling."""
 
 import pytest
-from pathlib import Path
-from longecho.manifest import Manifest, SourceConfig, find_manifest, load_manifest, save_manifest
+
+from longecho.manifest import (
+    Manifest,
+    SourceConfig,
+    find_manifest,
+    load_manifest,
+    save_manifest,
+)
 
 
 class TestSourceConfig:

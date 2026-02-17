@@ -1,20 +1,4 @@
-"""
-ECHO site builder.
-
-This module generates static HTML sites from ECHO-compliant archives.
-It discovers sub-sources (via manifest or auto-discovery), generates
-navigation pages, and creates a unified browsable interface.
-
-The primary function is `build_site()` which returns a `BuildResult`
-with the output path and statistics.
-
-Example:
-    >>> from longecho.build import build_site
-    >>> result = build_site("/path/to/archive")
-    >>> if result.success:
-    ...     print(f"Built site at {result.output_path}")
-    ...     print(f"Found {result.sources_count} sources")
-"""
+"""ECHO site builder -- generates static HTML sites from ECHO archives."""
 
 import shutil
 from dataclasses import dataclass
@@ -51,9 +35,6 @@ def _load_sub_manifest(source_path: Path) -> Optional[Manifest]:
     try:
         return load_manifest(source_path)
     except (ValueError, OSError, UnicodeDecodeError):
-        # ValueError: invalid manifest format/content
-        # OSError: file system errors
-        # UnicodeDecodeError: invalid UTF-8
         return None
 
 
@@ -61,23 +42,16 @@ def discover_sub_sources(
     path: Path,
     manifest: Optional[Manifest] = None,
 ) -> list[EchoSource]:
-    """
-    Discover sub-sources in an archive directory.
-
-    Args:
-        path: Archive root path
-        manifest: Optional manifest with source configuration
-
-    Returns:
-        List of EchoSource objects sorted by order
-    """
+    """Discover sub-sources in an archive directory, sorted by order."""
     sources: list[EchoSource] = []
     seen_paths: set = set()
 
-    # If manifest specifies sources, use those first
     if manifest and manifest.sources:
         for source_config in manifest.sources:
-            source_path = path / source_config.path
+            source_path = (path / source_config.path).resolve()
+            # Prevent path traversal (absolute or ../ paths escaping archive root)
+            if not source_path.is_relative_to(path):
+                continue
             if not source_path.exists() or not source_path.is_dir():
                 continue
 
@@ -86,7 +60,6 @@ def discover_sub_sources(
                 continue
 
             source = result.source
-            # Apply manifest overrides
             if source_config.name:
                 source.name = source_config.name
             if source_config.icon:
@@ -94,7 +67,6 @@ def discover_sub_sources(
             if source_config.order is not None:
                 source.order = source_config.order
 
-            # Also check sub-manifest for overrides
             sub_manifest = _load_sub_manifest(source_path)
             if sub_manifest:
                 if not source_config.name and sub_manifest.name:
@@ -107,7 +79,6 @@ def discover_sub_sources(
             sources.append(source)
             seen_paths.add(source_path)
 
-    # Auto-discover additional sources
     for item in sorted(path.iterdir()):
         if not item.is_dir() or item.name.startswith(".") or item.name == "site" or item in seen_paths:
             continue
@@ -140,19 +111,9 @@ def build_source_page(
     output_dir: Path,
     bundle: bool = False,
 ) -> None:
-    """
-    Build a page for a single source.
-
-    Args:
-        env: Jinja2 environment
-        source: EchoSource object
-        parent_name: Parent archive name
-        output_dir: Output directory for this source
-        bundle: Whether to copy site contents
-    """
+    """Build an HTML page for a single source."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Read README content
     readme_html = ""
     readme_path = find_readme(source.path)
     if readme_path:
@@ -162,7 +123,6 @@ def build_source_page(
         except (OSError, UnicodeDecodeError):
             pass
 
-    # Determine site URL
     site_url = None
     if source.has_site:
         if bundle and source.site_path:
@@ -195,20 +155,8 @@ def build_site(
     path: Path,
     output: Optional[Path] = None,
     bundle: bool = False,
-    offline: bool = True,
 ) -> BuildResult:
-    """
-    Build a static site for an ECHO archive.
-
-    Args:
-        path: Path to the archive
-        output: Output directory (default: path/site/)
-        bundle: Copy all sub-sites into unified site
-        offline: Bundle all CSS/JS/fonts (default: true)
-
-    Returns:
-        BuildResult with success status and details
-    """
+    """Build a static site for an ECHO archive."""
     path = Path(path).resolve()
 
     if not path.exists():
@@ -224,16 +172,13 @@ def build_site(
             error=f"Not an ECHO archive: {result.reason}"
         )
 
-    # Load manifest if present
     manifest = None
     try:
         manifest = load_manifest(path)
     except ValueError as e:
         return BuildResult(success=False, error=str(e))
 
-    # Determine archive name and description
-    # Cascade: manifest > EchoSource (which already has frontmatter > heading > dirname)
-    assert result.source is not None  # guaranteed by compliant check above
+    assert result.source is not None
     name = (manifest.name if manifest else None) or result.source.name
     description = (manifest.description if manifest else None) or result.source.description
 
@@ -272,17 +217,23 @@ def build_site(
     )
 
 
+def _sanitize_html(html: str) -> str:
+    """Strip dangerous HTML elements from rendered markdown."""
+    import re
+
+    # Remove script, style, iframe, object tags and their contents
+    html = re.sub(r"<(script|style|iframe|object)\b[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
+    # Remove self-closing variants
+    html = re.sub(r"<(script|style|iframe|object)\b[^>]*/?>", "", html, flags=re.IGNORECASE)
+    # Remove on* event handlers from remaining tags
+    html = re.sub(r"\s+on\w+\s*=\s*[\"'][^\"']*[\"']", "", html, flags=re.IGNORECASE)
+    html = re.sub(r"\s+on\w+\s*=\s*\S+", "", html, flags=re.IGNORECASE)
+    return html
+
+
 def markdown_to_html(content: str) -> str:
-    """
-    Convert markdown to HTML using the markdown library.
-
-    Args:
-        content: Markdown content
-
-    Returns:
-        HTML content with fenced code blocks and tables supported
-    """
+    """Convert markdown to sanitized HTML."""
     import markdown
 
-    result: str = markdown.markdown(content, extensions=["fenced_code", "tables"])
-    return result
+    html = markdown.markdown(content, extensions=["fenced_code", "tables"])
+    return _sanitize_html(html)

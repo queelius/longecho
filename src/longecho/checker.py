@@ -1,21 +1,4 @@
-"""
-ECHO compliance checker.
-
-This module provides functionality to check if a directory is ECHO-compliant.
-A directory is ECHO-compliant if it meets two criteria:
-
-1. Has a README.md or README.txt at the root explaining the data
-2. Contains data in durable formats (SQLite, JSON, Markdown, etc.)
-
-The primary function is `check_compliance()` which returns a `ComplianceResult`
-with detailed information about the compliance status.
-
-Example:
-    >>> from longecho.checker import check_compliance
-    >>> result = check_compliance("/path/to/archive")
-    >>> if result.compliant:
-    ...     print(f"Compliant! Formats: {result.source.durable_formats}")
-"""
+"""ECHO compliance checker."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,37 +6,29 @@ from typing import Optional
 
 import yaml
 
-# Durable formats recognized by ECHO
 DURABLE_EXTENSIONS: set[str] = {
     # Structured data
-    ".db", ".sqlite", ".sqlite3",  # SQLite
-    ".json", ".jsonl",              # JSON
+    ".db", ".sqlite", ".sqlite3", ".json", ".jsonl",
     # Documents
-    ".md", ".markdown",             # Markdown
-    ".txt", ".text",                # Plain text
-    ".rst",                         # reStructuredText
+    ".md", ".markdown", ".txt", ".text", ".rst",
     # Archives
-    ".zip",                         # ZIP
-    # Images (for photos/media archives)
+    ".zip",
+    # Images
     ".jpg", ".jpeg", ".png", ".webp", ".gif",
-    # Data
-    ".csv", ".tsv",                 # Tabular data
-    ".xml",                         # XML
-    ".yaml", ".yml",                # YAML
+    # Tabular / data
+    ".csv", ".tsv", ".xml", ".yaml", ".yml",
 }
 
-# Patterns to exclude from format detection
 EXCLUDE_PATTERNS: set[str] = {
-    "README.md", "README.txt",      # Don't count README as "data"
-    "CLAUDE.md", "CHANGELOG.md",    # Meta files
+    "README.md", "README.txt",
+    "CLAUDE.md", "CHANGELOG.md",
     ".gitignore", ".gitattributes",
     "pyproject.toml", "setup.py", "setup.cfg",
     "requirements.txt",
 }
 
-# Configuration constants
-DEFAULT_FORMAT_SCAN_DEPTH: int = 2  # Max depth for format detection
-MAX_README_SUMMARY_LENGTH: int = 500  # Max characters for README summary
+DEFAULT_FORMAT_SCAN_DEPTH: int = 2
+MAX_README_SUMMARY_LENGTH: int = 500
 
 
 @dataclass
@@ -69,11 +44,7 @@ class Readme:
 def split_frontmatter(content: str) -> tuple[Optional[dict], str]:
     """Split YAML frontmatter from markdown content.
 
-    Frontmatter must start at the very beginning of the content,
-    delimited by --- lines.
-
-    Returns:
-        (frontmatter dict or None, remaining content)
+    Returns (frontmatter dict or None, remaining body).
     """
     if not content.startswith("---"):
         return None, content
@@ -97,10 +68,7 @@ def split_frontmatter(content: str) -> tuple[Optional[dict], str]:
 
 
 def parse_readme(readme_path: Path) -> Optional[Readme]:
-    """Parse a README into frontmatter, title, and summary.
-
-    Returns None if the file can't be read.
-    """
+    """Parse a README into frontmatter, title, and summary. Returns None if unreadable."""
     try:
         content = readme_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -115,18 +83,15 @@ def parse_readme(readme_path: Path) -> Optional[Readme]:
     for line in body.split("\n"):
         stripped = line.strip()
 
-        # Extract first # heading as title
         if stripped.startswith("# ") and title is None:
             title = stripped[2:].strip()
             continue
 
-        # Skip other headings
         if stripped.startswith("#"):
             if summary_lines:
-                break  # hit next section, stop collecting
+                break
             continue
 
-        # Empty line ends paragraph
         if not stripped:
             if in_paragraph:
                 break
@@ -177,15 +142,7 @@ class ComplianceResult:
 
 
 def find_readme(path: Path) -> Optional[Path]:
-    """
-    Find README file at the root of a directory.
-
-    Args:
-        path: Directory to check
-
-    Returns:
-        Path to README if found, None otherwise
-    """
+    """Find README file at the root of a directory."""
     for name in ["README.md", "README.txt", "readme.md", "readme.txt"]:
         readme = path / name
         if readme.is_file():
@@ -194,16 +151,7 @@ def find_readme(path: Path) -> Optional[Path]:
 
 
 def detect_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> list[str]:
-    """
-    Detect file formats in a directory.
-
-    Args:
-        path: Directory to scan
-        max_depth: Maximum directory depth to scan
-
-    Returns:
-        List of file extensions found
-    """
+    """Detect file formats in a directory up to max_depth."""
     formats = set()
 
     def scan_directory(dir_path: Path, depth: int):
@@ -230,15 +178,7 @@ def detect_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> li
 
 
 def is_durable_format(extension: str) -> bool:
-    """
-    Check if a file extension is a durable format.
-
-    Args:
-        extension: File extension (with or without leading dot)
-
-    Returns:
-        True if the format is durable
-    """
+    """Check if a file extension is a durable format (with or without leading dot)."""
     ext = extension.lower()
     if not ext.startswith("."):
         ext = "." + ext
@@ -246,18 +186,7 @@ def is_durable_format(extension: str) -> bool:
 
 
 def check_compliance(path: Path) -> ComplianceResult:
-    """Check if a directory is ECHO-compliant.
-
-    A directory is ECHO-compliant if it has:
-    1. A README.md or README.txt at the root
-    2. Data in durable formats
-
-    Args:
-        path: Directory to check
-
-    Returns:
-        ComplianceResult with compliance status and details
-    """
+    """Check if a directory is ECHO-compliant (has README + durable formats)."""
     path = Path(path).resolve()
 
     if not path.exists():
@@ -279,24 +208,18 @@ def check_compliance(path: Path) -> ComplianceResult:
             compliant=False, path=path, reason="No durable data formats found"
         )
 
-    # Parse README for name/description
     readme = parse_readme(readme_file)
     name = (readme.title if readme else None) or path.name
     description = (readme.summary if readme else None) or ""
 
-    # Check for frontmatter overrides
     if readme and readme.frontmatter:
         fm = readme.frontmatter
         name = fm.get("title", name)
         description = fm.get("description", description)
 
-    # Check for site/
-    has_site = False
-    site_path = None
     site_dir = path / "site"
-    if site_dir.exists() and (site_dir / "index.html").exists():
-        has_site = True
-        site_path = site_dir
+    has_site = site_dir.exists() and (site_dir / "index.html").exists()
+    site_path = site_dir if has_site else None
 
     source = EchoSource(
         path=path,

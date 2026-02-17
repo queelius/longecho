@@ -1,14 +1,4 @@
-"""
-longecho CLI - ECHO compliance validator and site builder.
-
-Commands:
-    check    - Check if a directory is ECHO-compliant
-    discover - Find ECHO-compliant directories
-    search   - Search README descriptions
-    info     - Show detailed info about an ECHO source
-    build    - Build a static site from an ECHO archive
-    serve    - Serve an ECHO archive via HTTP
-"""
+"""longecho CLI -- ECHO compliance validator and site builder."""
 
 from pathlib import Path
 from typing import Optional
@@ -96,7 +86,10 @@ def check(
             console.print()
             console.print(f"  [dim]README:[/dim] {s.readme_path.name}")
             if s.description:
-                console.print(f"  [dim]Description:[/dim] {s.description[:100]}...")
+                desc = s.description
+                if len(desc) > 100:
+                    desc = desc[:97] + "..."
+                console.print(f"  [dim]Description:[/dim] {desc}")
             console.print(f"  [dim]Durable formats:[/dim] {', '.join(s.durable_formats)}")
             other = [f for f in s.formats if f not in s.durable_formats]
             if other:
@@ -310,11 +303,6 @@ def build(
         "-b",
         help="Copy all sub-sites into unified site.",
     ),
-    offline: bool = typer.Option(
-        True,
-        "--offline/--no-offline",
-        help="Bundle all CSS/JS/fonts (default: true).",
-    ),
 ):
     """
     Build a static site from an ECHO archive.
@@ -328,7 +316,6 @@ def build(
         path=path,
         output=output,
         bundle=bundle,
-        offline=offline,
     )
 
     if result.success:

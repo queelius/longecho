@@ -4,7 +4,7 @@ Guidance for Claude Code when working with this repository.
 
 ## Project Status
 
-**Alpha.** Core functionality implemented and tested (78% coverage, 114 tests).
+**Alpha.** Core functionality implemented and tested (86% coverage, 124 tests).
 
 ## What longecho Is
 
@@ -41,6 +41,14 @@ src/longecho/
 ├── cli.py           # Typer CLI interface
 └── templates/       # Jinja2 HTML templates
 ```
+
+## Data Model
+
+- **Readme** — Parsed README: frontmatter (dict), body, title, summary
+- **EchoSource** — Compliant source: path, readme_path, name, description, formats, durable_formats, icon, order, has_site, site_path
+- **ComplianceResult** — Check result: compliant, path, reason, source (Optional[EchoSource])
+- **Manifest** — YAML-only, all fields optional: name, description, icon, sources
+- **Name cascade:** manifest > frontmatter > README heading > dirname
 
 ## Key Principles
 

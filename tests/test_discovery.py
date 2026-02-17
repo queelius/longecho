@@ -1,17 +1,13 @@
-"""
-Tests for the ECHO source discovery.
-"""
+"""Tests for the ECHO source discovery."""
 
-import pytest
 from pathlib import Path
 
 from longecho.discovery import (
     discover_sources,
-    search_sources,
     get_source_info,
+    search_sources,
     should_skip_directory,
 )
-from longecho.checker import EchoSource
 
 
 class TestShouldSkipDirectory:
@@ -105,36 +101,3 @@ class TestGetSourceInfo:
     def test_returns_none_for_non_compliant(self, non_compliant_dir_no_readme):
         source = get_source_info(non_compliant_dir_no_readme)
         assert source is None
-
-
-class TestEchoSource:
-    """Tests for EchoSource dataclass."""
-
-    def test_str_representation(self, temp_dir):
-        source = EchoSource(
-            path=temp_dir,
-            readme_path=temp_dir / "README.md",
-            name="test",
-            description="Test summary",
-            formats=[".db", ".json"],
-            durable_formats=[".db", ".json"]
-        )
-
-        result = str(source)
-        assert str(temp_dir) in result
-        assert "Test summary" in result
-
-    def test_str_truncates_long_summary(self, temp_dir):
-        long_desc = "x" * 100
-        source = EchoSource(
-            path=temp_dir,
-            readme_path=temp_dir / "README.md",
-            name="test",
-            description=long_desc,
-            formats=[],
-            durable_formats=[]
-        )
-
-        result = str(source)
-        assert "..." in result
-        assert len(result) < len(long_desc) + 50
