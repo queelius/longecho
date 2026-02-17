@@ -10,8 +10,8 @@ from longecho.discovery import (
     search_sources,
     get_source_info,
     should_skip_directory,
-    EchoSource,
 )
+from longecho.checker import EchoSource
 
 
 class TestShouldSkipDirectory:
@@ -114,7 +114,8 @@ class TestEchoSource:
         source = EchoSource(
             path=temp_dir,
             readme_path=temp_dir / "README.md",
-            readme_summary="Test summary",
+            name="test",
+            description="Test summary",
             formats=[".db", ".json"],
             durable_formats=[".db", ".json"]
         )
@@ -124,15 +125,16 @@ class TestEchoSource:
         assert "Test summary" in result
 
     def test_str_truncates_long_summary(self, temp_dir):
-        long_summary = "x" * 100
+        long_desc = "x" * 100
         source = EchoSource(
             path=temp_dir,
             readme_path=temp_dir / "README.md",
-            readme_summary=long_summary,
+            name="test",
+            description=long_desc,
             formats=[],
             durable_formats=[]
         )
 
         result = str(source)
         assert "..." in result
-        assert len(result) < len(long_summary) + 50
+        assert len(result) < len(long_desc) + 50

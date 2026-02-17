@@ -13,15 +13,14 @@ Key functions:
 Example:
     >>> from longecho.discovery import discover_sources
     >>> for source in discover_sources("~/"):
-    ...     print(f"{source.path}: {source.readme_summary}")
+    ...     print(f"{source.path}: {source.description}")
 """
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .checker import check_compliance, find_readme
+from .checker import EchoSource, check_compliance, find_readme
 
 # Directories to skip during discovery
 SKIP_DIRECTORIES = {
@@ -33,23 +32,6 @@ SKIP_DIRECTORIES = {
     ".mypy_cache", ".ruff_cache",
     "site-packages",
 }
-
-
-@dataclass
-class EchoSource:
-    """An ECHO-compliant data source."""
-
-    path: Path
-    readme_path: Path
-    readme_summary: Optional[str] = None
-    formats: list[str] = field(default_factory=list)
-    durable_formats: list[str] = field(default_factory=list)
-
-    def __str__(self) -> str:
-        summary = self.readme_summary or "No description"
-        if len(summary) > 60:
-            summary = summary[:57] + "..."
-        return f"{self.path}: {summary}"
 
 
 def should_skip_directory(name: str) -> bool:
@@ -102,14 +84,8 @@ def discover_sources(
             readme = find_readme(path)
             if readme:
                 result = check_compliance(path)
-                if result.compliant and result.readme_path:
-                    yield EchoSource(
-                        path=result.path,
-                        readme_path=result.readme_path,
-                        readme_summary=result.readme_summary,
-                        formats=result.formats,
-                        durable_formats=result.durable_formats
-                    )
+                if result.compliant and result.source:
+                    yield result.source
 
             # Recurse into subdirectories
             for item in sorted(path.iterdir()):
@@ -149,8 +125,8 @@ def search_sources(
     query_lower = query.lower()
 
     for source in discover_sources(root, max_depth):
-        # Check summary
-        if source.readme_summary and query_lower in source.readme_summary.lower():
+        # Check description
+        if source.description and query_lower in source.description.lower():
             yield source
             continue
 
@@ -176,14 +152,6 @@ def get_source_info(path: Path) -> Optional[EchoSource]:
         EchoSource if compliant, None otherwise
     """
     result = check_compliance(path)
-
-    if not result.compliant or not result.readme_path:
+    if not result.compliant:
         return None
-
-    return EchoSource(
-        path=result.path,
-        readme_path=result.readme_path,
-        readme_summary=result.readme_summary,
-        formats=result.formats,
-        durable_formats=result.durable_formats
-    )
+    return result.source

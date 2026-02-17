@@ -9,8 +9,8 @@ discover ECHO-compliant sources, and build static sites for archives.
 __version__ = "0.2.0"
 
 from .build import BuildResult, build_site
-from .checker import ComplianceResult, check_compliance
-from .discovery import EchoSource, discover_sources
+from .checker import ComplianceResult, EchoSource, check_compliance
+from .discovery import discover_sources
 from .manifest import Manifest, SourceConfig, load_manifest
 
 __all__ = [
