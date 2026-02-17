@@ -8,10 +8,10 @@ from pathlib import Path
 from longecho.checker import (
     check_compliance,
     find_readme,
-    extract_first_paragraph,
     detect_formats,
     is_durable_format,
     ComplianceResult,
+    EchoSource,
     DURABLE_EXTENSIONS,
 )
 
@@ -49,47 +49,6 @@ class TestFindReadme:
 
     def test_returns_none_if_missing(self, temp_dir):
         result = find_readme(temp_dir)
-        assert result is None
-
-
-class TestExtractFirstParagraph:
-    """Tests for extract_first_paragraph function."""
-
-    def test_extracts_paragraph_after_title(self, temp_dir):
-        readme = temp_dir / "README.md"
-        readme.write_text("""# Title
-
-This is the first paragraph of the readme.
-It spans multiple lines.
-
-## Section
-
-More content.
-""")
-        result = extract_first_paragraph(readme)
-        assert result is not None
-        assert "first paragraph" in result
-
-    def test_skips_frontmatter(self, temp_dir):
-        readme = temp_dir / "README.md"
-        readme.write_text("""---
-title: Test
-date: 2024-01-01
----
-
-# Title
-
-Real content here.
-""")
-        result = extract_first_paragraph(readme)
-        assert result is not None
-        assert "Real content" in result
-
-    def test_returns_none_for_empty(self, temp_dir):
-        readme = temp_dir / "README.md"
-        readme.write_text("")
-
-        result = extract_first_paragraph(readme)
         assert result is None
 
 
@@ -162,28 +121,30 @@ class TestCheckCompliance:
         result = check_compliance(echo_compliant_dir)
 
         assert result.compliant is True
-        assert result.readme_path is not None
-        assert result.readme_path.name == "README.md"
-        assert len(result.durable_formats) > 0
-        assert ".db" in result.durable_formats or ".json" in result.durable_formats
+        assert result.source is not None
+        assert result.source.readme_path.name == "README.md"
+        assert len(result.source.durable_formats) > 0
+        assert ".db" in result.source.durable_formats or ".json" in result.source.durable_formats
 
     def test_non_compliant_no_readme(self, non_compliant_dir_no_readme):
         result = check_compliance(non_compliant_dir_no_readme)
 
         assert result.compliant is False
+        assert result.source is None
         assert "README" in result.reason
 
     def test_non_compliant_no_durable_formats(self, non_compliant_dir_no_durable):
         result = check_compliance(non_compliant_dir_no_durable)
 
         assert result.compliant is False
-        assert result.readme_path is not None
+        assert result.source is None
         assert "durable" in result.reason.lower()
 
     def test_nonexistent_path(self):
         result = check_compliance(Path("/nonexistent/path"))
 
         assert result.compliant is False
+        assert result.source is None
         assert "not exist" in result.reason.lower()
 
     def test_file_path(self, temp_dir):
@@ -193,6 +154,7 @@ class TestCheckCompliance:
         result = check_compliance(test_file)
 
         assert result.compliant is False
+        assert result.source is None
         assert "not a directory" in result.reason.lower()
 
 
@@ -203,8 +165,13 @@ class TestComplianceResult:
         result = ComplianceResult(
             compliant=True,
             path=temp_dir,
-            readme_path=temp_dir / "README.md",
-            durable_formats=[".db", ".json"]
+            source=EchoSource(
+                path=temp_dir,
+                readme_path=temp_dir / "README.md",
+                name="test",
+                description="test desc",
+                durable_formats=[".db", ".json"],
+            )
         )
 
         assert "ECHO-compliant" in str(result)
@@ -218,3 +185,134 @@ class TestComplianceResult:
 
         assert "Not ECHO-compliant" in str(result)
         assert "No README" in str(result)
+
+
+class TestEchoSource:
+    """Tests for EchoSource dataclass."""
+
+    def test_str_short_description(self, temp_dir):
+        source = EchoSource(
+            path=temp_dir,
+            readme_path=temp_dir / "README.md",
+            name="test",
+            description="A short description",
+        )
+        s = str(source)
+        assert str(temp_dir) in s
+        assert "A short description" in s
+
+    def test_str_long_description_truncated(self, temp_dir):
+        long_desc = "A" * 80
+        source = EchoSource(
+            path=temp_dir,
+            readme_path=temp_dir / "README.md",
+            name="test",
+            description=long_desc,
+        )
+        s = str(source)
+        assert "..." in s
+        assert len(s.split(": ", 1)[1]) <= 60
+
+    def test_str_empty_description(self, temp_dir):
+        source = EchoSource(
+            path=temp_dir,
+            readme_path=temp_dir / "README.md",
+            name="test",
+            description="",
+        )
+        assert "No description" in str(source)
+
+    def test_defaults(self, temp_dir):
+        source = EchoSource(
+            path=temp_dir,
+            readme_path=temp_dir / "README.md",
+            name="test",
+            description="desc",
+        )
+        assert source.formats == []
+        assert source.durable_formats == []
+        assert source.icon is None
+        assert source.order == 0
+        assert source.has_site is False
+        assert source.site_path is None
+
+
+class TestCheckComplianceEchoSource:
+    """Tests for EchoSource population in check_compliance."""
+
+    def test_name_from_readme_title(self, echo_compliant_dir):
+        result = check_compliance(echo_compliant_dir)
+        assert result.source is not None
+        assert result.source.name == "Test Data Archive"
+
+    def test_description_from_readme(self, echo_compliant_dir):
+        result = check_compliance(echo_compliant_dir)
+        assert result.source is not None
+        assert "test archive" in result.source.description.lower()
+
+    def test_frontmatter_overrides_title(self, temp_dir):
+        readme = temp_dir / "README.md"
+        readme.write_text("""---
+title: Frontmatter Title
+description: Frontmatter description
+---
+
+# Heading Title
+
+Some paragraph text.
+""")
+        (temp_dir / "data.json").write_text("{}")
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert result.source.name == "Frontmatter Title"
+        assert result.source.description == "Frontmatter description"
+
+    def test_icon_from_frontmatter(self, temp_dir):
+        readme = temp_dir / "README.md"
+        readme.write_text("""---
+icon: "\U0001f4da"
+---
+
+# Books
+
+My book collection.
+""")
+        (temp_dir / "books.json").write_text("[]")
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert result.source.icon == "\U0001f4da"
+
+    def test_site_detection(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Test\n\nA test source.")
+        (temp_dir / "data.db").touch()
+        site_dir = temp_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "index.html").write_text("<html></html>")
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert result.source.has_site is True
+        assert result.source.site_path == site_dir
+
+    def test_no_site_without_index(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Test\n\nA test source.")
+        (temp_dir / "data.db").touch()
+        site_dir = temp_dir / "site"
+        site_dir.mkdir()
+        # site/ exists but no index.html
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert result.source.has_site is False
+
+    def test_name_falls_back_to_dirname(self, temp_dir):
+        # README with no title heading
+        (temp_dir / "README.md").write_text("Just some text without a heading.\n")
+        (temp_dir / "data.csv").write_text("a,b\n1,2\n")
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        # Should fall back to directory name
+        assert result.source.name == temp_dir.name

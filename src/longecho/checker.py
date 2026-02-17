@@ -14,7 +14,7 @@ Example:
     >>> from longecho.checker import check_compliance
     >>> result = check_compliance("/path/to/archive")
     >>> if result.compliant:
-    ...     print(f"Compliant! Formats: {result.durable_formats}")
+    ...     print(f"Compliant! Formats: {result.source.durable_formats}")
 """
 
 from dataclasses import dataclass, field
@@ -140,16 +140,35 @@ def parse_readme(readme_path: Path) -> Optional[Readme]:
 
 
 @dataclass
+class EchoSource:
+    """An ECHO-compliant data source."""
+
+    path: Path
+    readme_path: Path
+    name: str
+    description: str
+    formats: list[str] = field(default_factory=list)
+    durable_formats: list[str] = field(default_factory=list)
+    icon: Optional[str] = None
+    order: int = 0
+    has_site: bool = False
+    site_path: Optional[Path] = None
+
+    def __str__(self) -> str:
+        desc = self.description or "No description"
+        if len(desc) > 60:
+            desc = desc[:57] + "..."
+        return f"{self.path}: {desc}"
+
+
+@dataclass
 class ComplianceResult:
     """Result of an ECHO compliance check."""
 
     compliant: bool
     path: Path
-    readme_path: Optional[Path] = None
-    readme_summary: Optional[str] = None
-    formats: list[str] = field(default_factory=list)
-    durable_formats: list[str] = field(default_factory=list)
     reason: Optional[str] = None
+    source: Optional[EchoSource] = None  # populated when compliant
 
     def __str__(self) -> str:
         if self.compliant:
@@ -172,65 +191,6 @@ def find_readme(path: Path) -> Optional[Path]:
         if readme.is_file():
             return readme
     return None
-
-
-def extract_first_paragraph(readme_path: Path) -> Optional[str]:
-    """
-    Extract the first meaningful paragraph from a README.
-
-    Skips title lines (starting with #) and empty lines.
-
-    Args:
-        readme_path: Path to README file
-
-    Returns:
-        First paragraph text, or None if extraction fails
-    """
-    try:
-        content = readme_path.read_text(encoding="utf-8")
-        lines = content.split("\n")
-
-        paragraph_lines = []
-        in_paragraph = False
-
-        for line in lines:
-            stripped = line.strip()
-
-            # Skip empty lines before paragraph
-            if not stripped:
-                if in_paragraph:
-                    # End of paragraph
-                    break
-                continue
-
-            # Skip title lines
-            if stripped.startswith("#"):
-                continue
-
-            # Skip frontmatter
-            if stripped == "---":
-                continue
-
-            # Skip metadata lines
-            if ":" in stripped and not in_paragraph:
-                # Likely frontmatter or metadata
-                if stripped.split(":")[0].strip().lower() in {
-                    "version", "status", "date", "author", "title"
-                }:
-                    continue
-
-            # Found paragraph content
-            in_paragraph = True
-            paragraph_lines.append(stripped)
-
-        if paragraph_lines:
-            return " ".join(paragraph_lines)[:MAX_README_SUMMARY_LENGTH]
-
-        return None
-    except (OSError, UnicodeDecodeError):
-        # OSError: file system errors (e.g., file disappeared)
-        # UnicodeDecodeError: invalid UTF-8 encoding
-        return None
 
 
 def detect_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> list[str]:
@@ -286,8 +246,7 @@ def is_durable_format(extension: str) -> bool:
 
 
 def check_compliance(path: Path) -> ComplianceResult:
-    """
-    Check if a directory is ECHO-compliant.
+    """Check if a directory is ECHO-compliant.
 
     A directory is ECHO-compliant if it has:
     1. A README.md or README.txt at the root
@@ -302,49 +261,53 @@ def check_compliance(path: Path) -> ComplianceResult:
     path = Path(path).resolve()
 
     if not path.exists():
-        return ComplianceResult(
-            compliant=False,
-            path=path,
-            reason="Path does not exist"
-        )
-
+        return ComplianceResult(compliant=False, path=path, reason="Path does not exist")
     if not path.is_dir():
+        return ComplianceResult(compliant=False, path=path, reason="Path is not a directory")
+
+    readme_file = find_readme(path)
+    if not readme_file:
         return ComplianceResult(
-            compliant=False,
-            path=path,
-            reason="Path is not a directory"
+            compliant=False, path=path, reason="No README.md or README.txt found"
         )
 
-    # Check for README
-    readme = find_readme(path)
-    if not readme:
-        return ComplianceResult(
-            compliant=False,
-            path=path,
-            reason="No README.md or README.txt found"
-        )
-
-    # Detect formats
     formats = detect_formats(path)
     durable = [f for f in formats if is_durable_format(f)]
 
-    # Check for durable formats
     if not durable:
         return ComplianceResult(
-            compliant=False,
-            path=path,
-            readme_path=readme,
-            readme_summary=extract_first_paragraph(readme),
-            formats=formats,
-            durable_formats=[],
-            reason="No durable data formats found"
+            compliant=False, path=path, reason="No durable data formats found"
         )
 
-    return ComplianceResult(
-        compliant=True,
+    # Parse README for name/description
+    readme = parse_readme(readme_file)
+    name = (readme.title if readme else None) or path.name
+    description = (readme.summary if readme else None) or ""
+
+    # Check for frontmatter overrides
+    if readme and readme.frontmatter:
+        fm = readme.frontmatter
+        name = fm.get("title", name)
+        description = fm.get("description", description)
+
+    # Check for site/
+    has_site = False
+    site_path = None
+    site_dir = path / "site"
+    if site_dir.exists() and (site_dir / "index.html").exists():
+        has_site = True
+        site_path = site_dir
+
+    source = EchoSource(
         path=path,
-        readme_path=readme,
-        readme_summary=extract_first_paragraph(readme),
+        readme_path=readme_file,
+        name=name,
+        description=description,
         formats=formats,
-        durable_formats=durable
+        durable_formats=durable,
+        icon=readme.frontmatter.get("icon") if readme and readme.frontmatter else None,
+        has_site=has_site,
+        site_path=site_path,
     )
+
+    return ComplianceResult(compliant=True, path=path, source=source)
