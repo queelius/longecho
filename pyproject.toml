@@ -28,6 +28,7 @@ dependencies = [
     "rich>=13.0.0",
     "jinja2>=3.0.0",
     "markdown>=3.0.0",
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -45,8 +46,6 @@ docs = [
     "mkdocs-material>=9.0.0",
 ]
 full = [
-    "pyyaml>=6.0.0",
-    "jsonschema>=4.0.0",
     "datasette>=0.64.0",
 ]
 
@@ -56,16 +55,12 @@ longecho = "longecho.cli:app"
 [tool.hatch.build.targets.wheel]
 packages = ["src/longecho"]
 
-[tool.hatch.build.targets.wheel.shared-data]
-"schemas" = "share/longecho/schemas"
-
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
     "/tests",
     "/spec",
     "/docs",
-    "/schemas",
 ]
 
 [tool.pytest.ini_options]
@@ -90,7 +85,7 @@ no_implicit_optional = true
 
 # Per-module overrides for optional dependencies
 [[tool.mypy.overrides]]
-module = ["yaml", "jsonschema"]
+module = ["yaml"]
 ignore_missing_imports = true
 
 [tool.ruff]

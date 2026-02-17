@@ -91,22 +91,19 @@ def check(
     if result.compliant:
         console.print(f"[green]✓[/green] ECHO-compliant: {path}")
 
-        if verbose and result.readme_path:
+        if verbose and result.source:
+            s = result.source
             console.print()
-            console.print(f"  [dim]README:[/dim] {result.readme_path.name}")
-            if result.readme_summary:
-                console.print(f"  [dim]Summary:[/dim] {result.readme_summary[:100]}...")
-            console.print(f"  [dim]Durable formats:[/dim] {', '.join(result.durable_formats)}")
-            if result.formats:
-                other = [f for f in result.formats if f not in result.durable_formats]
-                if other:
-                    console.print(f"  [dim]Other formats:[/dim] {', '.join(other)}")
+            console.print(f"  [dim]README:[/dim] {s.readme_path.name}")
+            if s.description:
+                console.print(f"  [dim]Description:[/dim] {s.description[:100]}...")
+            console.print(f"  [dim]Durable formats:[/dim] {', '.join(s.durable_formats)}")
+            other = [f for f in s.formats if f not in s.durable_formats]
+            if other:
+                console.print(f"  [dim]Other formats:[/dim] {', '.join(other)}")
     else:
         console.print(f"[red]✗[/red] Not ECHO-compliant: {path}")
         console.print(f"  [dim]Reason:[/dim] {result.reason}")
-
-        if verbose and result.readme_path:
-            console.print(f"  [dim]README found:[/dim] {result.readme_path.name}")
 
         raise typer.Exit(code=1)
 
@@ -153,7 +150,7 @@ def discover(
         table.add_column("Description")
 
         for source in sources:
-            desc = source.readme_summary or ""
+            desc = source.description or ""
             if len(desc) > 50:
                 desc = desc[:47] + "..."
             table.add_row(
@@ -169,8 +166,8 @@ def discover(
 
         for source in sources:
             console.print(f"[cyan]{source.path}[/cyan]")
-            if source.readme_summary:
-                desc = source.readme_summary
+            if source.description:
+                desc = source.description
                 if len(desc) > 80:
                     desc = desc[:77] + "..."
                 console.print(f"  [dim]{desc}[/dim]")
@@ -216,8 +213,8 @@ def search(
 
     for source in sources:
         console.print(f"[cyan]{source.path}[/cyan]")
-        if source.readme_summary:
-            desc = source.readme_summary
+        if source.description:
+            desc = source.description
             if len(desc) > 80:
                 desc = desc[:77] + "..."
             console.print(f"  [dim]{desc}[/dim]")
@@ -251,8 +248,8 @@ def info(
         f"[bold]README:[/bold] {source.readme_path.name}",
     ]
 
-    if source.readme_summary:
-        info_lines.append(f"[bold]Summary:[/bold] {source.readme_summary}")
+    if source.description:
+        info_lines.append(f"[bold]Description:[/bold] {source.description}")
 
     info_lines.append(f"[bold]Durable formats:[/bold] {', '.join(source.durable_formats)}")
 
@@ -313,12 +310,6 @@ def build(
         "-b",
         help="Copy all sub-sites into unified site.",
     ),
-    deep: bool = typer.Option(
-        False,
-        "--deep",
-        "-d",
-        help="Aggressive discovery mode.",
-    ),
     offline: bool = typer.Option(
         True,
         "--offline/--no-offline",
@@ -329,7 +320,7 @@ def build(
     Build a static site from an ECHO archive.
 
     Generates a unified browsable site from an ECHO archive and its
-    sub-sources. Reads manifest.json/yaml if present for configuration.
+    sub-sources. Reads manifest.yaml if present for configuration.
     """
     console.print(f"[bold]Building site for:[/bold] {path}")
 
@@ -337,7 +328,6 @@ def build(
         path=path,
         output=output,
         bundle=bundle,
-        deep=deep,
         offline=offline,
     )
 

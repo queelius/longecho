@@ -24,7 +24,7 @@ from typing import Optional
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from .checker import ComplianceResult, EchoSource, check_compliance, find_readme
+from .checker import EchoSource, check_compliance, find_readme
 from .manifest import Manifest, load_manifest
 
 
@@ -125,12 +125,7 @@ def discover_sub_sources(
                 source.description = sub_manifest.description
             if sub_manifest.icon:
                 source.icon = sub_manifest.icon
-            if sub_manifest.order is not None:
-                source.order = sub_manifest.order
-            else:
-                source.order = 100  # default for auto-discovered
-        else:
-            source.order = 100  # default for auto-discovered
+        source.order = 100  # default for auto-discovered
 
         sources.append(source)
 
@@ -238,6 +233,7 @@ def build_site(
 
     # Determine archive name and description
     # Cascade: manifest > EchoSource (which already has frontmatter > heading > dirname)
+    assert result.source is not None  # guaranteed by compliant check above
     name = (manifest.name if manifest else None) or result.source.name
     description = (manifest.description if manifest else None) or result.source.description
 

@@ -2,9 +2,7 @@
 
 import datetime
 
-import pytest
-from pathlib import Path
-from longecho.checker import Readme, split_frontmatter, parse_readme
+from longecho.checker import parse_readme, split_frontmatter
 
 
 class TestSplitFrontmatter:
