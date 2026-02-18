@@ -80,6 +80,6 @@ def search_sources(
 
 
 def get_source_info(path: Path) -> Optional[EchoSource]:
-    """Get detailed information about an longecho source, or None if not compliant."""
+    """Get detailed information about a longecho source, or None if not compliant."""
     result = check_compliance(path)
     return result.source if result.compliant else None

@@ -1,7 +1,7 @@
 """longecho site builder -- generates a single-file application from a longecho archive."""
 
-import json
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -13,20 +13,14 @@ from .checker import EchoSource, check_compliance, find_readme
 from .discovery import should_skip_directory
 
 
+@dataclass
 class BuildResult:
     """Result of a site build operation."""
 
-    def __init__(
-        self,
-        success: bool,
-        output_path: Optional[Path] = None,
-        sources_count: int = 0,
-        error: Optional[str] = None,
-    ):
-        self.success = success
-        self.output_path = output_path
-        self.sources_count = sources_count
-        self.error = error
+    success: bool
+    output_path: Optional[Path] = None
+    sources_count: int = 0
+    error: Optional[str] = None
 
 
 def get_jinja_env() -> Environment:
@@ -39,10 +33,32 @@ def get_jinja_env() -> Environment:
 
 def _sanitize_html(html: str) -> str:
     """Strip dangerous HTML elements from rendered markdown."""
-    html = re.sub(r"<(script|style|iframe|object)\b[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
-    html = re.sub(r"<(script|style|iframe|object)\b[^>]*/?>", "", html, flags=re.IGNORECASE)
+    # Remove dangerous tags with content
+    html = re.sub(
+        r"<(script|style|iframe|object|embed)\b[^>]*>.*?</\1>",
+        "", html, flags=re.DOTALL | re.IGNORECASE,
+    )
+    # Remove self-closing dangerous tags
+    html = re.sub(
+        r"<(script|style|iframe|object|embed|base|meta|link)\b[^>]*/?>",
+        "", html, flags=re.IGNORECASE,
+    )
+    # Remove opening-only dangerous tags (base, meta, link are void elements)
+    html = re.sub(
+        r"<(base|meta|link)\b[^>]*>",
+        "", html, flags=re.IGNORECASE,
+    )
+    # Remove form tags
+    html = re.sub(r"</?form\b[^>]*>", "", html, flags=re.IGNORECASE)
+    # Remove on* event handlers (quoted)
     html = re.sub(r"\s+on\w+\s*=\s*[\"'][^\"']*[\"']", "", html, flags=re.IGNORECASE)
-    html = re.sub(r"\s+on\w+\s*=\s*\S+", "", html, flags=re.IGNORECASE)
+    # Remove on* event handlers (unquoted, stop at > or whitespace)
+    html = re.sub(r"\s+on\w+\s*=\s*[^\s>]+", "", html, flags=re.IGNORECASE)
+    # Remove javascript: URIs in href/src/action attributes
+    html = re.sub(
+        r'(href|src|action)\s*=\s*["\']?\s*javascript:[^"\'>\s]*["\']?',
+        "", html, flags=re.IGNORECASE,
+    )
     return html
 
 
@@ -54,14 +70,17 @@ def markdown_to_html(content: str) -> str:
     return _sanitize_html(html)
 
 
-def _get_data_files(source: EchoSource) -> list[dict]:
-    """Get data files in a source directory, with relative paths from site/."""
+def _get_data_files(source: EchoSource, output_path: Path) -> list[dict]:
+    """Get data files in a source directory, with relative paths from output_path."""
     files = []
     for fmt in source.durable_formats:
         for f in source.path.glob(f"*{fmt}"):
             if f.is_file():
-                # Relative path from site/ up to the source's data
-                rel = Path("..") / f.relative_to(source.path.parent)
+                try:
+                    rel = Path(f.relative_to(output_path.parent))
+                except ValueError:
+                    # output_path is outside the archive — use absolute file:// URI
+                    rel = Path(f.as_uri()) if hasattr(f, "as_uri") else f
                 files.append({"name": f.name, "path": str(rel)})
     return sorted(files, key=lambda x: x["name"])
 
@@ -100,7 +119,7 @@ def discover_sub_sources(source: EchoSource) -> list[EchoSource]:
     return sources
 
 
-def _source_to_json(source: EchoSource, site_output: Path) -> dict:
+def _source_to_json(source: EchoSource, output_path: Path) -> dict:
     """Convert an EchoSource to a JSON-serializable dict for the SFA."""
     readme_html = ""
     readme_path = find_readme(source.path)
@@ -117,7 +136,7 @@ def _source_to_json(source: EchoSource, site_output: Path) -> dict:
         "formats": source.durable_formats,
         "frontmatter": source.frontmatter or {},
         "readme_html": readme_html,
-        "data_files": _get_data_files(source),
+        "data_files": _get_data_files(source, output_path),
     }
 
 
@@ -128,22 +147,23 @@ def _generate_site_readme(
     output_path: Path,
 ) -> None:
     """Generate a longecho-compliant README.md for the site/ directory."""
+    import yaml
+
     source_names = ", ".join(s.name for s in sources)
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    content = f"""---
-name: {name} Site
-description: Static site generated from longecho archive
-generator: longecho build v{__version__}
-datetime: {now}
-contents:
-  - path: index.html
-    description: Single-file browsable archive
----
+    frontmatter = {
+        "name": f"{name} Site",
+        "description": "Static site generated from longecho archive",
+        "generator": f"longecho build v{__version__}",
+        "datetime": now,
+        "contents": [
+            {"path": "index.html", "description": "Single-file browsable archive"},
+        ],
+    }
+    fm_yaml = yaml.dump(frontmatter, default_flow_style=False, sort_keys=False)
 
-Generated by longecho from {len(sources)} source(s): {source_names}.
-Open index.html in any browser to explore.
-"""
+    content = f"---\n{fm_yaml}---\n\nGenerated by longecho from {len(sources)} source(s): {source_names}.\nOpen index.html in any browser to explore.\n"
     readme_path = output_path / "README.md"
     readme_path.write_text(content, encoding="utf-8")
 
@@ -185,9 +205,7 @@ def build_site(
     html = template.render(
         name=name,
         description=description,
-        sources_json=json.dumps(sources_data, ensure_ascii=False),
-        name_json=json.dumps(name),
-        description_json=json.dumps(description),
+        sources_data=sources_data,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
 

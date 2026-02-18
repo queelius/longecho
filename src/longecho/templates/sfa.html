@@ -178,7 +178,7 @@
 
     <script>
     (function() {
-        var DATA = {{ sources_json }};
+        var DATA = {{ sources_data|tojson }};
 
         var listEl = document.getElementById('source-list');
         var detailEl = document.getElementById('source-detail');
@@ -187,8 +187,8 @@
         var titleEl = document.getElementById('page-title');
         var descEl = document.getElementById('page-desc');
 
-        var rootName = {{ name_json }};
-        var rootDesc = {{ description_json }};
+        var rootName = {{ name|tojson }};
+        var rootDesc = {{ description|tojson }};
 
         // Build a source card element using safe DOM methods
         function createCard(source, idx, attrName) {
@@ -316,22 +316,6 @@
                 detailEl.appendChild(filesDiv);
             }
 
-            // Child sources
-            if (source.children && source.children.length) {
-                var section = document.createElement('div');
-                section.className = 'detail-section';
-                var ch3 = document.createElement('h3');
-                ch3.textContent = 'Contents';
-                section.appendChild(ch3);
-
-                var grid = document.createElement('div');
-                grid.className = 'sources';
-                for (var c = 0; c < source.children.length; c++) {
-                    grid.appendChild(createCard(source.children[c], c, 'child'));
-                }
-                section.appendChild(grid);
-                detailEl.appendChild(section);
-            }
         }
 
         function showList() {

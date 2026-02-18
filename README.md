@@ -229,7 +229,6 @@ longecho check ~/my-data/ --verbose    # Show README, formats, frontmatter
 
 longecho query ~/                      # Find sources across the tree
 longecho query ~/ --search "bookmarks" # Search README text
-longecho query ~/ --author "Alex"      # Filter by any frontmatter field
 longecho query ~/ --depth 1            # Control depth
 longecho query ~/ --json               # Output as JSON
 
@@ -260,7 +259,7 @@ Markdown-based sources (Hugo, Jekyll, Obsidian, etc.) are inherently longecho-co
 ## Development
 
 ```bash
-pip install -e ".[dev,full]"
+pip install -e ".[dev]"
 pytest tests/ -v
 pytest tests/ --cov=src/longecho --cov-report=term-missing
 mypy src/longecho/
