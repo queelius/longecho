@@ -14,7 +14,7 @@ This document briefly lists the toolkits that exist alongside longecho. Each too
 | mtk | Mail | Exists |
 | repoindex | Git repos | Exists |
 
-Markdown-based sources (Hugo, Jekyll, Obsidian, etc.) are inherently ECHO-compliant.
+Markdown-based sources (Hugo, Jekyll, Obsidian, etc.) are inherently longecho-compliant.
 
 ---
 
@@ -66,5 +66,4 @@ No schema.json, no manifest, no version numbers. Just enough for someone to get 
 
 ## Related
 
-- [ECHO.md](ECHO.md) — ECHO philosophy
-- [LONGECHO.md](LONGECHO.md) — longecho tool specification
+- [LONGECHO.md](LONGECHO.md) — longecho philosophy and tool specification

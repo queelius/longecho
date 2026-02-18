@@ -1,43 +1,15 @@
 # longecho
 
-**ECHO philosophy documentation, compliance validator, and static site builder.**
+**A philosophy and a tool for durable personal archives.**
 
 ---
-
-## What Is This?
-
-longecho is both a philosophy and a tool:
-
-- **ECHO** is a philosophy for creating durable personal data archives that survive time
-- **longecho** is a CLI tool that validates ECHO compliance and builds browsable sites
-
-## Quick Start
-
-```bash
-# Check if a directory is ECHO-compliant
-longecho check ~/my-data/
-
-# Find ECHO sources under a path
-longecho discover ~/
-
-# Build a static site from an archive
-longecho build ~/my-archive/
-
-# Preview locally
-longecho serve ~/my-archive/
-```
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [ECHO Philosophy](ECHO.md) | Core principles for durable archives |
-| [longecho Tool](LONGECHO.md) | CLI commands, manifest spec, site conventions |
-| [Toolkit Ecosystem](TOOLKIT-ECOSYSTEM.md) | List of existing toolkits |
-
-## Design Notes
-
-See [DESIGN-NOTES.md](../DESIGN-NOTES.md) for design decisions and rationale.
+| [longecho](LONGECHO.md) | Philosophy, compliance spec, and CLI reference |
+| [Toolkit Ecosystem](TOOLKIT-ECOSYSTEM.md) | Standalone toolkits that produce longecho-compliant data |
 
 ---
 

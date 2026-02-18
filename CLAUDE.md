@@ -4,28 +4,23 @@ Guidance for Claude Code when working with this repository.
 
 ## Project Status
 
-**Alpha.** Core functionality implemented and tested (86% coverage, 124 tests).
+**Alpha.** Spec v2 written. Implementation needs updating to match new spec.
 
 ## What longecho Is
 
-longecho provides:
+longecho is both a philosophy and a tool for durable personal archives. One name, one concept.
 
-1. **Documentation** — Explains and motivates the ECHO philosophy (`spec/`)
-2. **Validator** — Checks ECHO compliance (`longecho check`)
-3. **Discovery** — Finds ECHO sources (`longecho discover`, `longecho search`)
-4. **Site Builder** — Generates unified static sites (`longecho build`)
-5. **Dev Server** — Previews archives locally (`longecho serve`)
+- **Philosophy** — Self-describing data (README.md) in durable formats
+- **Tool** — CLI that validates compliance, queries archives, and builds browsable sites
 
-## Commands
+## Commands (target spec)
 
 ```bash
-longecho check ~/path       # Is this directory ECHO-compliant?
-longecho discover ~/        # Find ECHO-compliant directories
-longecho search ~/ "query"  # Search README descriptions
-longecho info ~/path        # Show detailed source info
-longecho formats            # List recognized durable formats
-longecho build ~/archive    # Generate static site
-longecho serve ~/archive    # Preview via HTTP
+longecho check ~/path              # Is this directory longecho-compliant?
+longecho query ~/                  # Find/search/filter sources across the tree
+longecho query ~/ --author "Alex"  # Filter by any frontmatter field
+longecho build ~/archive           # Generate single-file static site
+longecho formats                   # List recognized durable formats
 ```
 
 ## Architecture
@@ -33,39 +28,39 @@ longecho serve ~/archive    # Preview via HTTP
 ```
 src/longecho/
 ├── __init__.py      # Public API exports
-├── checker.py       # ECHO compliance checking
-├── discovery.py     # Source discovery and search
-├── manifest.py      # Manifest loading/validation
-├── build.py         # Static site generation
-├── serve.py         # HTTP server for preview
+├── checker.py       # Compliance checking + README parsing
+├── discovery.py     # Source discovery (tree walk)
+├── build.py         # Single-file site generation
 ├── cli.py           # Typer CLI interface
-└── templates/       # Jinja2 HTML templates
+└── templates/       # Jinja2 HTML template (single SFA template)
 ```
+
+Note: `manifest.py` and `serve.py` are being removed per spec v2.
 
 ## Data Model
 
 - **Readme** — Parsed README: frontmatter (dict), body, title, summary
-- **EchoSource** — Compliant source: path, readme_path, name, description, formats, durable_formats, icon, order, has_site, site_path
+- **EchoSource** — Compliant source: path, readme_path, name, description, formats, durable_formats, has_site, site_path
 - **ComplianceResult** — Check result: compliant, path, reason, source (Optional[EchoSource])
-- **Manifest** — YAML-only, all fields optional: name, description, icon, sources
-- **Name cascade:** manifest > frontmatter > README heading > dirname
+- **Name cascade:** frontmatter `name` > `# Heading` > dirname
+- **Description cascade:** frontmatter `description` > first paragraph after heading
+- **`contents` field** — lists directory entries (curation + ordering for build)
 
 ## Key Principles
 
-1. **ECHO philosophy** — Self-describing data with README.md + durable formats
-2. **Graceful degradation** — Archives work without longecho; longecho adds convenience
-3. **Standalone toolkits** — ctk, btk, etc. work independently; longecho unifies their outputs
+1. **Self-describing** — README is the interface; frontmatter adds optional structured metadata
+2. **Recursive/fractal** — Every directory is the same kind of object; nesting is unlimited
+3. **Graceful degradation** — Archives work without longecho; longecho adds convenience
+4. **No parent overrides** — A source's name/description always comes from its own README
+5. **Single-file site** — Build output is a self-contained HTML file (SFA), works from `file://`
 
 ## Documentation Structure
 
 ```
 spec/
 ├── index.md             # Documentation index
-├── ECHO.md              # ECHO philosophy (standalone)
-├── LONGECHO.md          # Tool specification + archive conventions
+├── LONGECHO.md          # Unified spec (philosophy + tool)
 └── TOOLKIT-ECOSYSTEM.md # List of toolkits
-
-DESIGN-NOTES.md          # Design decisions (project root)
 ```
 
 ## Development
@@ -93,6 +88,7 @@ ruff check src/longecho/
 - Typer for CLI
 - Rich for terminal output
 - Jinja2 for templates
+- PyYAML for frontmatter parsing
 - pytest for testing
 - mypy for type checking
 - ruff for linting

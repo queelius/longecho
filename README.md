@@ -1,95 +1,87 @@
 # longecho
 
-ECHO philosophy documentation, compliance validator, and static site builder.
+A philosophy and a tool for durable personal archives.
 
 ## Status
 
-**Alpha.** Core functionality implemented and tested.
+**Alpha.** Spec v2 written. Implementation being updated to match.
 
-## What This Is
+## The Philosophy
 
-longecho provides:
+Personal data is fragile. Companies shut down. Formats become obsolete. Hard drives fail.
 
-1. **Documentation** — Explains and motivates the ECHO philosophy
-2. **Validator** — Checks if a directory is ECHO-compliant
-3. **Discovery** — Finds and searches ECHO sources
-4. **Site Builder** — Generates unified static sites from archives
-5. **Dev Server** — Previews archives via HTTP
+longecho is a bet that with enough self-description and simple formats, your data can outlive the tools that created it. The name evokes what we're after: your voice, echoing forward through time.
 
-## The ECHO Philosophy
+A directory is **longecho-compliant** if it has:
 
-ECHO is a philosophy for durable personal data:
+1. A `README.md` or `README.txt` explaining what the data is
+2. Data in durable formats (SQLite, JSON, Markdown, plain text, etc.)
 
-- **Self-describing** — A `README.md` at the root explains what the data is
-- **Durable formats** — SQLite, JSON, Markdown, plain text
-
-A directory is ECHO-compliant if it has a README and uses durable formats. That's it.
-
-See [spec/ECHO.md](spec/ECHO.md) for the full philosophy.
+That's it. No special files, no schema. The README is the interface. Optional YAML frontmatter adds structured metadata that the tool can parse, but freeform prose works just as well for humans and LLMs.
 
 ## Installation
 
 ```bash
 pip install longecho
-
-# With optional dependencies for YAML manifests
-pip install longecho[full]
 ```
 
 ## Commands
 
 ```bash
-# Check if a directory is ECHO-compliant
-longecho check ~/my-data/
-
-# Find ECHO-compliant directories
-longecho discover ~/
-
-# Search README descriptions
-longecho search ~/ "conversations"
-
-# Show detailed info about a source
-longecho info ~/my-data/
-
-# List recognized durable formats
-longecho formats
-
-# Build a static site from an ECHO archive
-longecho build ~/my-archive/
-
-# Serve an archive via HTTP for preview
-longecho serve ~/my-archive/ --port 8000
+longecho check ~/my-data/              # Is this compliant?
+longecho query ~/                      # Find sources across the tree
+longecho query ~/ --author "Alex"      # Filter by any frontmatter field
+longecho query ~/ --search "bookmarks" # Search README text
+longecho build ~/my-archive/           # Generate single-file static site
+longecho formats                       # List recognized durable formats
 ```
 
-## Boundaries
+## How It Works
 
-**longecho unifies, but doesn't orchestrate toolkits.** Each toolkit (ctk, btk, etc.) exports its own ECHO-compliant archive independently. longecho's `build` command combines these into a unified browsable site, but doesn't invoke or manage the toolkits themselves.
+Every longecho archive is a tree of self-describing directories. Each directory has a README, optionally with YAML frontmatter:
 
-**longecho doesn't mediate formats.** There is no central interchange format. Each toolkit defines its own input/output formats.
+```markdown
+---
+name: Conversation Archive
+description: AI conversation history
+author: Alex Towell
+contents:
+  - path: chatgpt/
+  - path: claude/
+---
 
-**longecho doesn't maintain a registry.** If a toolkit is ECHO-compliant, its own README documents that fact.
+# Conversation Archive
+
+Six years of AI conversations.
+```
+
+The structure is recursive — each sub-directory is the same kind of object. If the archive gets fragmented, each piece still explains itself.
+
+`longecho build` walks the tree bottom-up and generates a single self-contained HTML file. README content and metadata are inlined; data files are linked via relative paths. Open it directly in a browser — no server needed.
+
+## Design Decisions
+
+**README is the only metadata source.** No manifest files. Frontmatter in the README is the single source of truth for structured metadata.
+
+**No parent overrides.** A source's name and description always come from its own README, ensuring consistency regardless of context.
+
+**Single-file application.** Build output is one HTML file with all content inlined and data files linked via relative paths. More durable than a directory of cross-linked files.
+
+**Trust the future.** Don't over-engineer. Future humans and LLMs will be smarter. Focus on preserving content and context, not building complex infrastructure.
 
 ## Documentation
 
-| Document | What it covers |
-|----------|----------------|
-| [spec/ECHO.md](spec/ECHO.md) | ECHO philosophy |
-| [spec/LONGECHO.md](spec/LONGECHO.md) | Tool specification |
-| [spec/MANIFEST-SCHEMA.md](spec/MANIFEST-SCHEMA.md) | Manifest format for archives |
-| [spec/TOOLKIT-ECOSYSTEM.md](spec/TOOLKIT-ECOSYSTEM.md) | List of ECHO-compliant toolkits |
+| Document | Description |
+|----------|-------------|
+| [spec/LONGECHO.md](spec/LONGECHO.md) | Full specification (philosophy + tool) |
+| [spec/TOOLKIT-ECOSYSTEM.md](spec/TOOLKIT-ECOSYSTEM.md) | Standalone toolkits that produce longecho-compliant data |
 
 ## Development
 
 ```bash
-# Install with dev dependencies
 pip install -e ".[dev,full]"
-
-# Run tests
 pytest tests/ -v
-
-# Type checking
+pytest tests/ --cov=src/longecho --cov-report=term-missing
 mypy src/longecho/
-
-# Linting
 ruff check src/longecho/
 ```
