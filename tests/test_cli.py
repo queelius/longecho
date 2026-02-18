@@ -14,86 +14,97 @@ class TestCheckCommand:
         result = runner.invoke(app, ["check", str(echo_compliant_dir)])
 
         assert result.exit_code == 0
-        assert "ECHO-compliant" in result.stdout
+        assert "longecho-compliant" in result.stdout
 
     def test_check_non_compliant_no_readme(self, non_compliant_dir_no_readme):
         result = runner.invoke(app, ["check", str(non_compliant_dir_no_readme)])
 
         assert result.exit_code == 1
-        assert "Not ECHO-compliant" in result.stdout
+        assert "Not longecho-compliant" in result.stdout
         assert "README" in result.stdout
 
     def test_check_verbose(self, echo_compliant_dir):
-        result = runner.invoke(app, ["check", str(echo_compliant_dir), "-v"])
+        result = runner.invoke(app, ["check", str(echo_compliant_dir), "-V"])
 
         assert result.exit_code == 0
         assert "README" in result.stdout
         assert "formats" in result.stdout.lower()
 
+    def test_check_verbose_shows_frontmatter(self, temp_dir):
+        """Verbose check shows custom frontmatter fields."""
+        (temp_dir / "README.md").write_text(
+            "---\nname: Test\nauthor: Alex\n---\n# Test\n\nA test."
+        )
+        (temp_dir / "data.json").write_text("{}")
 
-class TestDiscoverCommand:
-    """Tests for the discover command."""
+        result = runner.invoke(app, ["check", str(temp_dir), "-V"])
+        assert result.exit_code == 0
+        assert "author" in result.stdout
 
-    def test_discover_finds_sources(self, nested_echo_sources):
-        result = runner.invoke(app, ["discover", str(nested_echo_sources)])
+
+class TestQueryCommand:
+    """Tests for the query command."""
+
+    def test_query_finds_sources(self, nested_echo_sources):
+        result = runner.invoke(app, ["query", str(nested_echo_sources)])
 
         assert result.exit_code == 0
-        assert "echo source" in result.stdout.lower()
+        assert "source" in result.stdout.lower()
 
-    def test_discover_table_format(self, nested_echo_sources):
-        result = runner.invoke(app, ["discover", str(nested_echo_sources), "--table"])
-
-        assert result.exit_code == 0
-        # Table format should have path column
-
-    def test_discover_max_depth(self, nested_echo_sources):
+    def test_query_search(self, nested_echo_sources):
         result = runner.invoke(app, [
-            "discover",
-            str(nested_echo_sources),
-            "--max-depth", "1"
+            "query", str(nested_echo_sources),
+            "--search", "conversation",
+        ])
+
+        assert result.exit_code == 0
+
+    def test_query_search_no_matches(self, nested_echo_sources):
+        result = runner.invoke(app, [
+            "query", str(nested_echo_sources),
+            "--search", "xyznonexistent",
+        ])
+
+        assert result.exit_code == 0
+        assert "No longecho sources" in result.stdout
+
+    def test_query_table_format(self, nested_echo_sources):
+        result = runner.invoke(app, [
+            "query", str(nested_echo_sources), "--table",
+        ])
+
+        assert result.exit_code == 0
+
+    def test_query_json_format(self, nested_echo_sources):
+        result = runner.invoke(app, [
+            "query", str(nested_echo_sources), "--json",
+        ])
+
+        assert result.exit_code == 0
+
+    def test_query_depth(self, nested_echo_sources):
+        result = runner.invoke(app, [
+            "query", str(nested_echo_sources),
+            "--depth", "1",
         ])
 
         assert result.exit_code == 0
 
 
-class TestSearchCommand:
-    """Tests for the search command."""
+class TestBuildCommand:
+    """Tests for the build command."""
 
-    def test_search_finds_matches(self, nested_echo_sources):
-        result = runner.invoke(app, [
-            "search",
-            str(nested_echo_sources),
-            "conversation"
-        ])
+    def test_build_compliant(self, echo_compliant_dir):
+        result = runner.invoke(app, ["build", str(echo_compliant_dir)])
 
         assert result.exit_code == 0
-        assert "matching" in result.stdout.lower() or "ctk" in result.stdout.lower()
+        assert "Built site" in result.stdout
 
-    def test_search_no_matches(self, nested_echo_sources):
-        result = runner.invoke(app, [
-            "search",
-            str(nested_echo_sources),
-            "xyznonexistent"
-        ])
-
-        assert result.exit_code == 0
-        assert "No ECHO sources matching" in result.stdout
-
-
-class TestInfoCommand:
-    """Tests for the info command."""
-
-    def test_info_compliant_directory(self, echo_compliant_dir):
-        result = runner.invoke(app, ["info", str(echo_compliant_dir)])
-
-        assert result.exit_code == 0
-        assert "ECHO Source" in result.stdout
-
-    def test_info_non_compliant_directory(self, non_compliant_dir_no_readme):
-        result = runner.invoke(app, ["info", str(non_compliant_dir_no_readme)])
+    def test_build_non_compliant(self, non_compliant_dir_no_readme):
+        result = runner.invoke(app, ["build", str(non_compliant_dir_no_readme)])
 
         assert result.exit_code == 1
-        assert "Not an ECHO source" in result.stdout
+        assert "failed" in result.stdout.lower()
 
 
 class TestFormatsCommand:

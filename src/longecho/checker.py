@@ -1,4 +1,4 @@
-"""ECHO compliance checker."""
+"""longecho compliance checker."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -106,7 +106,7 @@ def parse_readme(readme_path: Path) -> Optional[Readme]:
 
 @dataclass
 class EchoSource:
-    """An ECHO-compliant data source."""
+    """A longecho-compliant data source."""
 
     path: Path
     readme_path: Path
@@ -114,10 +114,10 @@ class EchoSource:
     description: str
     formats: list[str] = field(default_factory=list)
     durable_formats: list[str] = field(default_factory=list)
-    icon: Optional[str] = None
-    order: int = 0
     has_site: bool = False
     site_path: Optional[Path] = None
+    frontmatter: Optional[dict] = None
+    contents: Optional[list[dict]] = None
 
     def __str__(self) -> str:
         desc = self.description or "No description"
@@ -128,7 +128,7 @@ class EchoSource:
 
 @dataclass
 class ComplianceResult:
-    """Result of an ECHO compliance check."""
+    """Result of a longecho compliance check."""
 
     compliant: bool
     path: Path
@@ -137,8 +137,8 @@ class ComplianceResult:
 
     def __str__(self) -> str:
         if self.compliant:
-            return f"ECHO-compliant: {self.path}"
-        return f"Not ECHO-compliant: {self.path} ({self.reason})"
+            return f"longecho-compliant: {self.path}"
+        return f"Not longecho-compliant: {self.path} ({self.reason})"
 
 
 def find_readme(path: Path) -> Optional[Path]:
@@ -185,8 +185,21 @@ def is_durable_format(extension: str) -> bool:
     return ext in DURABLE_EXTENSIONS
 
 
+def _parse_contents(frontmatter: dict) -> Optional[list[dict]]:
+    """Parse the contents field from frontmatter into normalized dicts."""
+    raw = frontmatter.get("contents")
+    if not isinstance(raw, list):
+        return None
+
+    entries = []
+    for item in raw:
+        if isinstance(item, dict) and "path" in item:
+            entries.append(item)
+    return entries if entries else None
+
+
 def check_compliance(path: Path) -> ComplianceResult:
-    """Check if a directory is ECHO-compliant (has README + durable formats)."""
+    """Check if a directory is longecho-compliant (has README + durable formats)."""
     path = Path(path).resolve()
 
     if not path.exists():
@@ -209,13 +222,19 @@ def check_compliance(path: Path) -> ComplianceResult:
         )
 
     readme = parse_readme(readme_file)
+
+    # Name cascade: frontmatter name > # Heading > dirname
     name = (readme.title if readme else None) or path.name
     description = (readme.summary if readme else None) or ""
+    frontmatter = None
+    contents = None
 
     if readme and readme.frontmatter:
         fm = readme.frontmatter
-        name = fm.get("title", name)
+        frontmatter = fm
+        name = fm.get("name", name)
         description = fm.get("description", description)
+        contents = _parse_contents(fm)
 
     site_dir = path / "site"
     has_site = site_dir.exists() and (site_dir / "index.html").exists()
@@ -228,9 +247,10 @@ def check_compliance(path: Path) -> ComplianceResult:
         description=description,
         formats=formats,
         durable_formats=durable,
-        icon=readme.frontmatter.get("icon") if readme and readme.frontmatter else None,
         has_site=has_site,
         site_path=site_path,
+        frontmatter=frontmatter,
+        contents=contents,
     )
 
     return ComplianceResult(compliant=True, path=path, source=source)

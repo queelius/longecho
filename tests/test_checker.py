@@ -1,4 +1,4 @@
-"""Tests for the ECHO compliance checker."""
+"""Tests for the longecho compliance checker."""
 
 from pathlib import Path
 
@@ -76,7 +76,6 @@ class TestDetectFormats:
 
         formats = detect_formats(temp_dir, max_depth=1)
         assert ".txt" in formats
-        # Deep file may not be found with shallow depth
 
 
 class TestIsDurableFormat:
@@ -165,19 +164,19 @@ class TestComplianceResult:
                 name="test",
                 description="test desc",
                 durable_formats=[".db", ".json"],
-            )
+            ),
         )
 
-        assert "ECHO-compliant" in str(result)
+        assert "longecho-compliant" in str(result)
 
     def test_str_non_compliant(self, temp_dir):
         result = ComplianceResult(
             compliant=False,
             path=temp_dir,
-            reason="No README found"
+            reason="No README found",
         )
 
-        assert "Not ECHO-compliant" in str(result)
+        assert "Not longecho-compliant" in str(result)
         assert "No README" in str(result)
 
 
@@ -225,10 +224,10 @@ class TestEchoSource:
         )
         assert source.formats == []
         assert source.durable_formats == []
-        assert source.icon is None
-        assert source.order == 0
         assert source.has_site is False
         assert source.site_path is None
+        assert source.frontmatter is None
+        assert source.contents is None
 
 
 class TestCheckComplianceEchoSource:
@@ -244,39 +243,48 @@ class TestCheckComplianceEchoSource:
         assert result.source is not None
         assert "test archive" in result.source.description.lower()
 
-    def test_frontmatter_overrides_title(self, temp_dir):
+    def test_frontmatter_name_overrides_heading(self, temp_dir):
+        """Frontmatter 'name' field takes priority over # Heading."""
         readme = temp_dir / "README.md"
-        readme.write_text("""---
-title: Frontmatter Title
-description: Frontmatter description
----
-
-# Heading Title
-
-Some paragraph text.
-""")
+        readme.write_text(
+            "---\nname: Frontmatter Name\ndescription: Frontmatter desc\n---\n"
+            "# Heading Title\n\nSome paragraph text.\n"
+        )
         (temp_dir / "data.json").write_text("{}")
 
         result = check_compliance(temp_dir)
         assert result.source is not None
-        assert result.source.name == "Frontmatter Title"
-        assert result.source.description == "Frontmatter description"
+        assert result.source.name == "Frontmatter Name"
+        assert result.source.description == "Frontmatter desc"
 
-    def test_icon_from_frontmatter(self, temp_dir):
+    def test_frontmatter_preserved(self, temp_dir):
+        """All frontmatter is stored on the source."""
         readme = temp_dir / "README.md"
-        readme.write_text("""---
-icon: "\U0001f4da"
----
-
-# Books
-
-My book collection.
-""")
-        (temp_dir / "books.json").write_text("[]")
+        readme.write_text(
+            "---\nname: Test\nauthor: Alex\ndatetime: 2026-02-18\n---\n"
+            "# Test\n\nA test source.\n"
+        )
+        (temp_dir / "data.json").write_text("{}")
 
         result = check_compliance(temp_dir)
         assert result.source is not None
-        assert result.source.icon == "\U0001f4da"
+        assert result.source.frontmatter is not None
+        assert result.source.frontmatter["author"] == "Alex"
+
+    def test_contents_field_parsed(self, temp_dir):
+        """Contents field is parsed from frontmatter."""
+        readme = temp_dir / "README.md"
+        readme.write_text(
+            "---\ncontents:\n  - path: data/\n  - path: index.json\n    description: An index\n---\n"
+            "# Test\n\nA test source.\n"
+        )
+        (temp_dir / "data.json").write_text("{}")
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert result.source.contents is not None
+        assert len(result.source.contents) == 2
+        assert result.source.contents[0]["path"] == "data/"
 
     def test_site_detection(self, temp_dir):
         (temp_dir / "README.md").write_text("# Test\n\nA test source.")
@@ -295,18 +303,15 @@ My book collection.
         (temp_dir / "data.db").touch()
         site_dir = temp_dir / "site"
         site_dir.mkdir()
-        # site/ exists but no index.html
 
         result = check_compliance(temp_dir)
         assert result.source is not None
         assert result.source.has_site is False
 
     def test_name_falls_back_to_dirname(self, temp_dir):
-        # README with no title heading
         (temp_dir / "README.md").write_text("Just some text without a heading.\n")
         (temp_dir / "data.csv").write_text("a,b\n1,2\n")
 
         result = check_compliance(temp_dir)
         assert result.source is not None
-        # Should fall back to directory name
         assert result.source.name == temp_dir.name

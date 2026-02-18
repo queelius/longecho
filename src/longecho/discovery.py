@@ -1,4 +1,4 @@
-"""ECHO source discovery -- find and search ECHO-compliant directories."""
+"""longecho source discovery -- find and search longecho-compliant directories."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -28,7 +28,7 @@ def discover_sources(
     max_depth: Optional[int] = None,
     follow_symlinks: bool = False
 ) -> Iterator[EchoSource]:
-    """Find all ECHO-compliant directories under a root path."""
+    """Find all longecho-compliant directories under a root path."""
     root = Path(root).resolve()
 
     if not root.exists() or not root.is_dir():
@@ -63,7 +63,7 @@ def search_sources(
     query: str,
     max_depth: Optional[int] = None
 ) -> Iterator[EchoSource]:
-    """Search ECHO sources by README content (case-insensitive)."""
+    """Search longecho sources by README content (case-insensitive)."""
     query_lower = query.lower()
 
     for source in discover_sources(root, max_depth):
@@ -80,6 +80,6 @@ def search_sources(
 
 
 def get_source_info(path: Path) -> Optional[EchoSource]:
-    """Get detailed information about an ECHO source, or None if not compliant."""
+    """Get detailed information about an longecho source, or None if not compliant."""
     result = check_compliance(path)
     return result.source if result.compliant else None

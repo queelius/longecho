@@ -1,9 +1,9 @@
-"""Tests for the ECHO site builder."""
+"""Tests for the longecho site builder."""
 
+import json
 from pathlib import Path
 
 import pytest
-import yaml
 
 from longecho.build import (
     BuildResult,
@@ -11,7 +11,7 @@ from longecho.build import (
     discover_sub_sources,
     markdown_to_html,
 )
-from longecho.manifest import Manifest, SourceConfig
+from longecho.checker import check_compliance
 
 
 class TestMarkdownToHtml:
@@ -37,99 +37,152 @@ class TestMarkdownToHtml:
         assert "<pre><code>" in result
         assert "code here" in result
 
+    def test_sanitizes_script_tags(self):
+        result = markdown_to_html("<script>alert('xss')</script>")
+        assert "<script>" not in result
+        assert "alert" not in result
+
+    def test_sanitizes_event_handlers(self):
+        result = markdown_to_html('<img src="x" onerror="alert(1)">')
+        assert "onerror" not in result
+
 
 class TestDiscoverSubSources:
     """Tests for discover_sub_sources function."""
 
-    def test_discovers_echo_sources(self, temp_dir):
+    def test_discovers_sources(self, temp_dir):
+        # Create root
+        (temp_dir / "README.md").write_text("# Root\n\nRoot archive.")
+        (temp_dir / "index.json").write_text("[]")
+
         # Create a sub-source
         source_dir = temp_dir / "source1"
         source_dir.mkdir()
         (source_dir / "README.md").write_text("# Source 1\n\nA data source.")
         (source_dir / "data.db").touch()
 
-        sources = discover_sub_sources(temp_dir)
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        sources = discover_sub_sources(result.source)
         assert len(sources) == 1
         assert sources[0].name == "Source 1"
 
-    def test_ignores_non_echo_dirs(self, temp_dir):
-        # Create a non-ECHO directory (no README)
-        source_dir = temp_dir / "not_echo"
-        source_dir.mkdir()
-        (source_dir / "data.db").touch()
+    def test_ignores_non_compliant_dirs(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Root\n\nRoot archive.")
+        (temp_dir / "index.json").write_text("[]")
 
-        sources = discover_sub_sources(temp_dir)
+        source_dir = temp_dir / "not_compliant"
+        source_dir.mkdir()
+        (source_dir / "data.db").touch()  # no README
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        sources = discover_sub_sources(result.source)
         assert len(sources) == 0
 
-    def test_uses_manifest_sources(self, temp_dir):
-        # Create source directory
-        source_dir = temp_dir / "source1"
-        source_dir.mkdir()
-        (source_dir / "README.md").write_text("# Source 1")
-        (source_dir / "data.db").touch()
-
-        # Create manifest
-        manifest = Manifest(
-            sources=[SourceConfig(path="source1/", order=1, name="Custom Name")]
+    def test_uses_contents_field(self, temp_dir):
+        """When contents is present, only listed paths are included."""
+        (temp_dir / "README.md").write_text(
+            "---\nname: Root\ncontents:\n  - path: source1/\n---\n# Root\n\nRoot archive."
         )
+        (temp_dir / "index.json").write_text("[]")
 
-        sources = discover_sub_sources(temp_dir, manifest)
+        # Listed source
+        s1 = temp_dir / "source1"
+        s1.mkdir()
+        (s1 / "README.md").write_text("# Source 1\n\nFirst.")
+        (s1 / "data.db").touch()
+
+        # Unlisted source (should be excluded)
+        s2 = temp_dir / "source2"
+        s2.mkdir()
+        (s2 / "README.md").write_text("# Source 2\n\nSecond.")
+        (s2 / "data.db").touch()
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        sources = discover_sub_sources(result.source)
         assert len(sources) == 1
-        assert sources[0].name == "Custom Name"
+        assert sources[0].name == "Source 1"
 
-    def test_sorts_by_order(self, temp_dir):
-        # Create sources
-        for name in ["source_a", "source_b", "source_c"]:
+    def test_contents_ordering(self, temp_dir):
+        """Contents field controls ordering."""
+        (temp_dir / "README.md").write_text(
+            "---\ncontents:\n  - path: beta/\n  - path: alpha/\n---\n# Root\n\nRoot."
+        )
+        (temp_dir / "index.json").write_text("[]")
+
+        for name in ["alpha", "beta"]:
             d = temp_dir / name
             d.mkdir()
-            (d / "README.md").write_text(f"# {name}")
+            (d / "README.md").write_text(f"# {name}\n\nSource {name}.")
             (d / "data.db").touch()
 
-        manifest = Manifest(
-            sources=[
-                SourceConfig(path="source_c/", order=1),
-                SourceConfig(path="source_a/", order=2),
-                SourceConfig(path="source_b/", order=3),
-            ]
-        )
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        sources = discover_sub_sources(result.source)
+        assert len(sources) == 2
+        assert sources[0].name == "beta"
+        assert sources[1].name == "alpha"
 
-        sources = discover_sub_sources(temp_dir, manifest)
-        assert sources[0].path.name == "source_c"
-        assert sources[1].path.name == "source_a"
-        assert sources[2].path.name == "source_b"
+    def test_auto_discovery_alphabetical(self, temp_dir):
+        """Without contents, sources are discovered alphabetically."""
+        (temp_dir / "README.md").write_text("# Root\n\nRoot.")
+        (temp_dir / "index.json").write_text("[]")
+
+        for name in ["charlie", "alpha", "beta"]:
+            d = temp_dir / name
+            d.mkdir()
+            (d / "README.md").write_text(f"# {name}\n\nSource.")
+            (d / "data.db").touch()
+
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        sources = discover_sub_sources(result.source)
+        assert len(sources) == 3
+        assert sources[0].name == "alpha"
+        assert sources[1].name == "beta"
+        assert sources[2].name == "charlie"
 
     def test_detects_existing_site(self, temp_dir):
-        # Create source with site
+        (temp_dir / "README.md").write_text("# Root\n\nRoot.")
+        (temp_dir / "index.json").write_text("[]")
+
         source_dir = temp_dir / "source1"
         source_dir.mkdir()
-        (source_dir / "README.md").write_text("# Source 1")
+        (source_dir / "README.md").write_text("# Source 1\n\nA source.")
         (source_dir / "data.db").touch()
         site_dir = source_dir / "site"
         site_dir.mkdir()
         (site_dir / "index.html").write_text("<html></html>")
 
-        sources = discover_sub_sources(temp_dir)
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        sources = discover_sub_sources(result.source)
         assert len(sources) == 1
         assert sources[0].has_site is True
 
     def test_ignores_site_directory(self, temp_dir):
-        # Create main site directory (should not be treated as source)
+        (temp_dir / "README.md").write_text("# Root\n\nRoot.")
+        (temp_dir / "index.json").write_text("[]")
+
         site_dir = temp_dir / "site"
         site_dir.mkdir()
         (site_dir / "index.html").write_text("<html></html>")
 
-        sources = discover_sub_sources(temp_dir)
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        sources = discover_sub_sources(result.source)
         assert len(sources) == 0
 
 
 class TestBuildSite:
     """Tests for build_site function."""
 
-    def test_requires_echo_compliance(self, temp_dir):
-        # Non-ECHO directory
+    def test_requires_compliance(self, temp_dir):
         result = build_site(temp_dir)
         assert result.success is False
-        assert "Not an ECHO archive" in result.error
+        assert "Not a longecho archive" in result.error
 
     def test_builds_basic_site(self, echo_compliant_dir):
         result = build_site(echo_compliant_dir)
@@ -137,6 +190,15 @@ class TestBuildSite:
         assert result.success is True
         assert result.output_path is not None
         assert (result.output_path / "index.html").exists()
+
+    def test_generates_site_readme(self, echo_compliant_dir):
+        result = build_site(echo_compliant_dir)
+
+        assert result.success is True
+        readme = result.output_path / "README.md"
+        assert readme.exists()
+        content = readme.read_text()
+        assert "longecho" in content.lower()
 
     def test_custom_output_path(self, echo_compliant_dir, temp_dir):
         output = temp_dir / "custom_output"
@@ -159,20 +221,25 @@ class TestBuildSite:
         assert result.success is False
         assert "not a directory" in result.error
 
-    def test_rejects_non_echo_root(self, nested_echo_sources):
-        # nested_echo_sources has no README at root, so build should fail
-        result = build_site(nested_echo_sources)
-        assert result.success is False
+    def test_sfa_output_is_single_file(self, echo_compliant_dir):
+        """Build output should be a single index.html, not multi-file."""
+        result = build_site(echo_compliant_dir)
+        assert result.success is True
+
+        # Should have index.html and README.md, no subdirectory pages
+        html_files = list(result.output_path.glob("**/*.html"))
+        assert len(html_files) == 1
+        assert html_files[0].name == "index.html"
 
 
 class TestBuildResult:
-    """Tests for BuildResult dataclass."""
+    """Tests for BuildResult."""
 
     def test_success_result(self):
         result = BuildResult(
             success=True,
             output_path=Path("/tmp/site"),
-            sources_count=3
+            sources_count=3,
         )
         assert result.success is True
         assert result.sources_count == 3
@@ -180,73 +247,60 @@ class TestBuildResult:
     def test_failure_result(self):
         result = BuildResult(
             success=False,
-            error="Something went wrong"
+            error="Something went wrong",
         )
         assert result.success is False
         assert result.error == "Something went wrong"
 
 
 @pytest.fixture
-def echo_compliant_with_sources(temp_dir):
-    """Create an ECHO archive with sub-sources."""
-    (temp_dir / "README.md").write_text("# Test Archive\n\nA test archive with multiple sources.")
-    (temp_dir / "index.json").write_text("[]")  # durable file to make root compliant
-    (temp_dir / "manifest.yaml").write_text(yaml.dump({
-        "name": "Test Archive",
-        "description": "A test archive",
-        "sources": [
-            {"path": "conversations/", "order": 1},
-            {"path": "bookmarks/", "order": 2},
-        ],
-    }, default_flow_style=False))
+def archive_with_sources(temp_dir):
+    """Create a longecho archive with sub-sources using frontmatter contents."""
+    (temp_dir / "README.md").write_text(
+        "---\nname: Test Archive\ndescription: A test archive\n"
+        "contents:\n  - path: conversations/\n  - path: bookmarks/\n---\n"
+        "# Test Archive\n\nA test archive with multiple sources."
+    )
+    (temp_dir / "index.json").write_text("[]")
 
     conv_dir = temp_dir / "conversations"
     conv_dir.mkdir()
-    (conv_dir / "README.md").write_text("# Conversations\n\nChat history.")
+    (conv_dir / "README.md").write_text(
+        "---\nname: Conversations\ndescription: AI conversation history\n---\n"
+        "# Conversations\n\nChat history."
+    )
     (conv_dir / "conversations.db").touch()
-    (conv_dir / "manifest.yaml").write_text(yaml.dump({
-        "name": "Conversations",
-        "description": "AI conversation history",
-        "icon": "\U0001F4AC",
-    }, default_flow_style=False))
 
     btk_dir = temp_dir / "bookmarks"
     btk_dir.mkdir()
-    (btk_dir / "README.md").write_text("# Bookmarks\n\nSaved links.")
+    (btk_dir / "README.md").write_text(
+        "---\nname: Bookmarks\ndescription: Personal bookmarks\n---\n"
+        "# Bookmarks\n\nSaved links."
+    )
     (btk_dir / "bookmarks.jsonl").write_text("")
-    (btk_dir / "manifest.yaml").write_text(yaml.dump({
-        "name": "Bookmarks",
-        "description": "Personal bookmarks",
-        "icon": "\U0001F516",
-    }, default_flow_style=False))
 
     return temp_dir
 
 
-class TestBuildWithManifest:
-    """Tests for building sites with manifests."""
+class TestBuildWithSources:
+    """Tests for building sites with sub-sources."""
 
-    def test_uses_manifest_name(self, echo_compliant_with_sources):
-        result = build_site(echo_compliant_with_sources)
+    def test_uses_archive_name(self, archive_with_sources):
+        result = build_site(archive_with_sources)
         assert result.success is True
 
-        # Check that the index.html contains the manifest name
         index_content = (result.output_path / "index.html").read_text()
         assert "Test Archive" in index_content
 
-    def test_creates_source_pages(self, echo_compliant_with_sources):
-        result = build_site(echo_compliant_with_sources)
+    def test_counts_sources(self, archive_with_sources):
+        result = build_site(archive_with_sources)
         assert result.success is True
         assert result.sources_count == 2
 
-        # Check source directories
-        assert (result.output_path / "conversations" / "index.html").exists()
-        assert (result.output_path / "bookmarks" / "index.html").exists()
-
-    def test_source_pages_have_content(self, echo_compliant_with_sources):
-        result = build_site(echo_compliant_with_sources)
+    def test_inlines_source_data_as_json(self, archive_with_sources):
+        result = build_site(archive_with_sources)
         assert result.success is True
 
-        conv_content = (result.output_path / "conversations" / "index.html").read_text()
-        assert "Conversations" in conv_content
-        assert "chat history" in conv_content.lower()
+        index_content = (result.output_path / "index.html").read_text()
+        assert "Conversations" in index_content
+        assert "Bookmarks" in index_content

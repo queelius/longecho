@@ -17,10 +17,10 @@ def temp_dir():
 
 @pytest.fixture
 def echo_compliant_dir(temp_dir):
-    """Create an ECHO-compliant directory."""
+    """Create a longecho-compliant directory."""
     (temp_dir / "README.md").write_text(
         "# Test Data Archive\n\n"
-        "This is a test archive for ECHO compliance testing.\n\n"
+        "This is a test archive for compliance testing.\n\n"
         "## Contents\n\n"
         "Contains test data in durable formats.\n"
     )
@@ -37,7 +37,7 @@ def echo_compliant_dir(temp_dir):
 @pytest.fixture
 def non_compliant_dir_no_readme(temp_dir):
     """Create a directory without README."""
-    (temp_dir / "data.json").write_text('{}')
+    (temp_dir / "data.json").write_text("{}")
     return temp_dir
 
 
@@ -53,7 +53,7 @@ def non_compliant_dir_no_durable(temp_dir):
 
 @pytest.fixture
 def nested_echo_sources(temp_dir):
-    """Create a directory structure with multiple ECHO sources."""
+    """Create a directory structure with multiple longecho sources."""
     conv_dir = temp_dir / "ctk-export"
     conv_dir.mkdir()
     (conv_dir / "README.md").write_text("# AI Conversations\n\nExported conversation history.\n")
@@ -76,25 +76,5 @@ def nested_echo_sources(temp_dir):
     other_dir = temp_dir / "other"
     other_dir.mkdir()
     (other_dir / "notes.txt").write_text("some notes")
-
-    return temp_dir
-
-
-@pytest.fixture
-def echo_archive_with_manifest(temp_dir):
-    """Create an ECHO archive with a manifest file."""
-    import yaml
-
-    (temp_dir / "README.md").write_text("# Test Archive\n\nA test archive with manifest.")
-    (temp_dir / "manifest.yaml").write_text(yaml.dump({
-        "name": "Test Archive",
-        "description": "A comprehensive test archive",
-        "sources": [{"path": "data/", "order": 1}],
-    }, default_flow_style=False))
-
-    data_dir = temp_dir / "data"
-    data_dir.mkdir()
-    (data_dir / "README.md").write_text("# Data\n\nTest data.")
-    (data_dir / "test.db").touch()
 
     return temp_dir

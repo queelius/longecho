@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "longecho"
-version = "0.2.0"
-description = "ECHO philosophy documentation, compliance validator, and site builder"
+version = "0.3.0"
+description = "Compliance validator and site builder for durable personal archives"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 authors = [
     { name = "Alex Towell" }
 ]
-keywords = ["echo", "archiving", "durability", "validator", "static-site"]
+keywords = ["longecho", "archiving", "durability", "validator", "static-site"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -41,13 +41,6 @@ dev = [
     "ruff>=0.4.0",
     "types-Markdown>=3.0.0",
 ]
-docs = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.0.0",
-]
-full = [
-    "datasette>=0.64.0",
-]
 
 [project.scripts]
 longecho = "longecho.cli:app"
@@ -59,8 +52,6 @@ packages = ["src/longecho"]
 include = [
     "/src",
     "/tests",
-    "/spec",
-    "/docs",
 ]
 
 [tool.pytest.ini_options]

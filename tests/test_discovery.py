@@ -1,4 +1,4 @@
-"""Tests for the ECHO source discovery."""
+"""Tests for longecho source discovery."""
 
 from pathlib import Path
 
@@ -37,7 +37,6 @@ class TestDiscoverSources:
     def test_discovers_multiple_sources(self, nested_echo_sources):
         sources = list(discover_sources(nested_echo_sources))
 
-        # Should find ctk-export, bookmarks, and blog
         assert len(sources) >= 3
 
         paths = [str(s.path) for s in sources]
@@ -46,20 +45,17 @@ class TestDiscoverSources:
         assert any("blog" in p for p in paths)
 
     def test_respects_max_depth(self, nested_echo_sources):
-        # With max_depth=1, shouldn't find nested blog
         sources = list(discover_sources(nested_echo_sources, max_depth=1))
 
         paths = [str(s.path) for s in sources]
         assert any("ctk-export" in p for p in paths)
         assert any("bookmarks" in p for p in paths)
-        # blog is at depth 2 (projects/blog), may or may not be found
 
     def test_empty_on_nonexistent_path(self):
         sources = list(discover_sources(Path("/nonexistent")))
         assert len(sources) == 0
 
     def test_skips_non_compliant(self, nested_echo_sources):
-        # The "other" directory has no README, should be skipped
         sources = list(discover_sources(nested_echo_sources))
 
         paths = [str(s.path) for s in sources]

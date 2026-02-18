@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ name }}</title>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #1a1a1a;
+            --muted: #666666;
+            --border: #e0e0e0;
+            --card-bg: #f8f9fa;
+            --link: #0066cc;
+            --link-hover: #004499;
+            --code-bg: #f4f4f4;
+            --search-bg: #f8f9fa;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1a1a1a;
+                --text: #e0e0e0;
+                --muted: #999999;
+                --border: #333333;
+                --card-bg: #242424;
+                --link: #6699ff;
+                --link-hover: #99bbff;
+                --code-bg: #2a2a2a;
+                --search-bg: #242424;
+            }
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background: var(--bg);
+        }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+
+        header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+        h1 { font-weight: 600; margin-bottom: 0.5rem; }
+        .description { color: var(--muted); font-size: 1.1rem; }
+
+        .search-box {
+            margin-bottom: 1.5rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--search-bg);
+            color: var(--text);
+            font-size: 1rem;
+        }
+
+        .search-box:focus { outline: 2px solid var(--link); border-color: var(--link); }
+
+        .breadcrumb { margin-bottom: 1rem; font-size: 0.9rem; }
+        .breadcrumb a { color: var(--link); text-decoration: none; cursor: pointer; }
+        .breadcrumb a:hover { text-decoration: underline; }
+
+        .sources { display: grid; gap: 1rem; }
+
+        .source-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .source-card:hover {
+            border-color: var(--link);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .source-name { font-weight: 600; font-size: 1.1rem; margin-bottom: 0.25rem; }
+        .source-desc { color: var(--muted); font-size: 0.95rem; }
+        .source-meta { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+
+        .detail-section { margin-top: 1.5rem; }
+
+        .metadata {
+            padding: 1rem;
+            background: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+        }
+
+        .metadata-row { display: flex; margin-bottom: 0.25rem; }
+        .metadata-label { font-weight: 500; width: 120px; flex-shrink: 0; }
+        .metadata-value { color: var(--muted); }
+
+        .readme-content h1,
+        .readme-content h2,
+        .readme-content h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        .readme-content p { margin-bottom: 1rem; }
+        .readme-content pre {
+            background: var(--code-bg);
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .readme-content code {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9rem;
+        }
+        .readme-content table {
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+        .readme-content th, .readme-content td {
+            border: 1px solid var(--border);
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+        }
+        .readme-content th { background: var(--card-bg); }
+
+        .data-files { margin-top: 1.5rem; }
+        .data-files h3 { margin-bottom: 0.75rem; }
+        .file-link {
+            display: block;
+            padding: 0.5rem 0;
+            color: var(--link);
+            text-decoration: none;
+            border-bottom: 1px solid var(--border);
+        }
+        .file-link:hover { text-decoration: underline; }
+        .file-link:last-child { border-bottom: none; }
+
+        footer {
+            margin-top: 3rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        footer a { color: var(--link); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+
+        .empty-state { text-align: center; padding: 3rem; color: var(--muted); }
+
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="page-title">{{ name }}</h1>
+            <p class="description" id="page-desc">{{ description }}</p>
+        </header>
+
+        <div id="breadcrumb" class="breadcrumb" hidden></div>
+
+        <input type="text" class="search-box" id="search"
+               placeholder="Search sources..." autocomplete="off">
+
+        <main id="main">
+            <div class="sources" id="source-list"></div>
+            <div id="source-detail" hidden></div>
+        </main>
+
+        <footer>
+            <p>
+                Generated by <a href="https://github.com/queelius/longecho">longecho</a>
+                &middot; longecho archive
+                {% if generated_at %}&middot; {{ generated_at }}{% endif %}
+            </p>
+        </footer>
+    </div>
+
+    <script>
+    (function() {
+        var DATA = {{ sources_json }};
+
+        var listEl = document.getElementById('source-list');
+        var detailEl = document.getElementById('source-detail');
+        var searchEl = document.getElementById('search');
+        var breadcrumbEl = document.getElementById('breadcrumb');
+        var titleEl = document.getElementById('page-title');
+        var descEl = document.getElementById('page-desc');
+
+        var rootName = {{ name_json }};
+        var rootDesc = {{ description_json }};
+
+        // Build a source card element using safe DOM methods
+        function createCard(source, idx, attrName) {
+            var card = document.createElement('div');
+            card.className = 'source-card';
+            card.setAttribute('data-' + attrName, idx);
+
+            var nameDiv = document.createElement('div');
+            nameDiv.className = 'source-name';
+            nameDiv.textContent = source.name;
+            card.appendChild(nameDiv);
+
+            var descDiv = document.createElement('div');
+            descDiv.className = 'source-desc';
+            descDiv.textContent = source.description;
+            card.appendChild(descDiv);
+
+            if (source.formats && source.formats.length) {
+                var metaDiv = document.createElement('div');
+                metaDiv.className = 'source-meta';
+                var span = document.createElement('span');
+                span.textContent = source.formats.join(', ');
+                metaDiv.appendChild(span);
+                card.appendChild(metaDiv);
+            }
+
+            return card;
+        }
+
+        function renderList(sources, filter) {
+            listEl.textContent = '';
+            var q = (filter || '').toLowerCase();
+            var count = 0;
+
+            for (var i = 0; i < sources.length; i++) {
+                var s = sources[i];
+                if (q && s.name.toLowerCase().indexOf(q) === -1 &&
+                    s.description.toLowerCase().indexOf(q) === -1) {
+                    continue;
+                }
+                count++;
+                listEl.appendChild(createCard(s, i, 'idx'));
+            }
+
+            if (count === 0) {
+                var empty = document.createElement('div');
+                empty.className = 'empty-state';
+                var p = document.createElement('p');
+                p.textContent = 'No sources found.';
+                empty.appendChild(p);
+                listEl.appendChild(empty);
+            }
+        }
+
+        function renderDetail(source) {
+            detailEl.textContent = '';
+
+            // Metadata
+            var meta = source.frontmatter || {};
+            var metaKeys = Object.keys(meta).filter(function(k) {
+                return k !== 'name' && k !== 'description' && k !== 'contents';
+            });
+
+            if (metaKeys.length || (source.formats && source.formats.length)) {
+                var metaBox = document.createElement('div');
+                metaBox.className = 'metadata';
+
+                if (source.formats && source.formats.length) {
+                    var row = document.createElement('div');
+                    row.className = 'metadata-row';
+                    var label = document.createElement('span');
+                    label.className = 'metadata-label';
+                    label.textContent = 'Formats';
+                    var val = document.createElement('span');
+                    val.className = 'metadata-value';
+                    val.textContent = source.formats.join(', ');
+                    row.appendChild(label);
+                    row.appendChild(val);
+                    metaBox.appendChild(row);
+                }
+
+                for (var i = 0; i < metaKeys.length; i++) {
+                    var k = metaKeys[i];
+                    var row2 = document.createElement('div');
+                    row2.className = 'metadata-row';
+                    var label2 = document.createElement('span');
+                    label2.className = 'metadata-label';
+                    label2.textContent = k;
+                    var val2 = document.createElement('span');
+                    val2.className = 'metadata-value';
+                    val2.textContent = String(meta[k]);
+                    row2.appendChild(label2);
+                    row2.appendChild(val2);
+                    metaBox.appendChild(row2);
+                }
+
+                detailEl.appendChild(metaBox);
+            }
+
+            // README content (pre-sanitized server-side by _sanitize_html)
+            if (source.readme_html) {
+                var readmeDiv = document.createElement('div');
+                readmeDiv.className = 'readme-content';
+                readmeDiv.innerHTML = source.readme_html;
+                detailEl.appendChild(readmeDiv);
+            }
+
+            // Data file links
+            if (source.data_files && source.data_files.length) {
+                var filesDiv = document.createElement('div');
+                filesDiv.className = 'data-files';
+                var h3 = document.createElement('h3');
+                h3.textContent = 'Data Files';
+                filesDiv.appendChild(h3);
+
+                for (var j = 0; j < source.data_files.length; j++) {
+                    var f = source.data_files[j];
+                    var a = document.createElement('a');
+                    a.className = 'file-link';
+                    a.href = f.path;
+                    a.textContent = f.name;
+                    filesDiv.appendChild(a);
+                }
+
+                detailEl.appendChild(filesDiv);
+            }
+
+            // Child sources
+            if (source.children && source.children.length) {
+                var section = document.createElement('div');
+                section.className = 'detail-section';
+                var ch3 = document.createElement('h3');
+                ch3.textContent = 'Contents';
+                section.appendChild(ch3);
+
+                var grid = document.createElement('div');
+                grid.className = 'sources';
+                for (var c = 0; c < source.children.length; c++) {
+                    grid.appendChild(createCard(source.children[c], c, 'child'));
+                }
+                section.appendChild(grid);
+                detailEl.appendChild(section);
+            }
+        }
+
+        function showList() {
+            titleEl.textContent = rootName;
+            descEl.textContent = rootDesc;
+            breadcrumbEl.hidden = true;
+            listEl.hidden = false;
+            detailEl.hidden = true;
+            searchEl.hidden = false;
+            renderList(DATA, searchEl.value);
+        }
+
+        function showDetail(idx) {
+            var source = DATA[idx];
+            titleEl.textContent = source.name;
+            descEl.textContent = source.description;
+
+            breadcrumbEl.textContent = '';
+            var link = document.createElement('a');
+            link.textContent = rootName;
+            link.onclick = showList;
+            breadcrumbEl.appendChild(link);
+            breadcrumbEl.appendChild(document.createTextNode(' / ' + source.name));
+
+            breadcrumbEl.hidden = false;
+            listEl.hidden = true;
+            detailEl.hidden = false;
+            searchEl.hidden = true;
+            renderDetail(source);
+        }
+
+        listEl.addEventListener('click', function(e) {
+            var card = e.target.closest('.source-card');
+            if (card && card.dataset.idx) {
+                showDetail(parseInt(card.dataset.idx, 10));
+            }
+        });
+
+        searchEl.addEventListener('input', function() {
+            renderList(DATA, searchEl.value);
+        });
+
+        showList();
+    })();
+    </script>
+</body>
+</html>

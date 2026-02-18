@@ -1,22 +1,21 @@
-"""longecho CLI -- ECHO compliance validator and site builder."""
+"""longecho CLI -- compliance validator, query tool, and site builder."""
 
+import json
 from pathlib import Path
 from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 
 from . import __version__
 from .build import build_site
 from .checker import check_compliance
-from .discovery import discover_sources, get_source_info, search_sources
-from .serve import serve_archive
+from .discovery import discover_sources, search_sources
 
 app = typer.Typer(
     name="longecho",
-    help="ECHO philosophy documentation and compliance validator.",
+    help="Compliance validator and site builder for durable personal archives.",
     no_args_is_help=True,
 )
 
@@ -41,10 +40,9 @@ def main(
     ),
 ):
     """
-    longecho - ECHO compliance validator.
+    longecho - compliance validator for durable personal archives.
 
-    ECHO is a philosophy for durable personal data archives.
-    A directory is ECHO-compliant if it has:
+    A directory is longecho-compliant if it has:
 
     1. A README.md or README.txt explaining the data
     2. Data stored in durable formats (SQLite, JSON, Markdown, etc.)
@@ -56,7 +54,7 @@ def main(
 def check(
     path: Path = typer.Argument(
         ...,
-        help="Directory to check for ECHO compliance.",
+        help="Directory to check for compliance.",
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -65,21 +63,15 @@ def check(
     verbose: bool = typer.Option(
         False,
         "--verbose",
-        "-v",
+        "-V",
         help="Show detailed information.",
     ),
 ):
-    """
-    Check if a directory is ECHO-compliant.
-
-    A directory is ECHO-compliant if it has:
-    - A README.md or README.txt at the root
-    - Data in durable formats
-    """
+    """Check if a directory is longecho-compliant."""
     result = check_compliance(path)
 
     if result.compliant:
-        console.print(f"[green]✓[/green] ECHO-compliant: {path}")
+        console.print(f"[green]\u2713[/green] longecho-compliant: {path}")
 
         if verbose and result.source:
             s = result.source
@@ -94,26 +86,35 @@ def check(
             other = [f for f in s.formats if f not in s.durable_formats]
             if other:
                 console.print(f"  [dim]Other formats:[/dim] {', '.join(other)}")
+            if s.frontmatter:
+                for key, val in s.frontmatter.items():
+                    if key not in ("name", "description", "contents"):
+                        console.print(f"  [dim]{key}:[/dim] {val}")
     else:
-        console.print(f"[red]✗[/red] Not ECHO-compliant: {path}")
+        console.print(f"[red]\u2717[/red] Not longecho-compliant: {path}")
         console.print(f"  [dim]Reason:[/dim] {result.reason}")
-
         raise typer.Exit(code=1)
 
 
 @app.command()
-def discover(
+def query(
     path: Path = typer.Argument(
         ...,
-        help="Root directory to scan for ECHO sources.",
+        help="Root directory to search.",
         exists=True,
         file_okay=False,
         dir_okay=True,
         resolve_path=True,
     ),
-    max_depth: Optional[int] = typer.Option(
+    search: Optional[str] = typer.Option(
         None,
-        "--max-depth",
+        "--search",
+        "-s",
+        help="Search README text (case-insensitive).",
+    ),
+    depth: Optional[int] = typer.Option(
+        None,
+        "--depth",
         "-d",
         help="Maximum directory depth to scan.",
     ),
@@ -123,169 +124,77 @@ def discover(
         "-t",
         help="Output as a table.",
     ),
+    json_format: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Output as JSON.",
+    ),
 ):
-    """
-    Find ECHO-compliant directories under a root path.
+    """Find, search, and filter sources across the archive tree."""
+    if search:
+        sources = list(search_sources(path, search, depth))
+    else:
+        sources = list(discover_sources(path, depth))
 
-    Scans for directories containing README files and checks
-    each for ECHO compliance.
-    """
-    sources = list(discover_sources(path, max_depth))
+    if json_format:
+        output: list[dict] = []
+        for s in sources:
+            entry: dict = {
+                "path": str(s.path),
+                "name": s.name,
+                "description": s.description,
+                "durable_formats": s.durable_formats,
+            }
+            if s.frontmatter:
+                entry["frontmatter"] = s.frontmatter
+            output.append(entry)
+        console.print(json.dumps(output, indent=2, ensure_ascii=False))
+        return
 
     if not sources:
-        console.print(f"[yellow]No ECHO-compliant sources found under {path}[/yellow]")
+        label = f"matching '{search}'" if search else f"under {path}"
+        console.print(f"[yellow]No longecho sources found {label}[/yellow]")
         return
 
     if table_format:
-        table = Table(title=f"ECHO Sources under {path}")
-        table.add_column("Path", style="cyan")
+        table = Table(title=f"longecho sources under {path}")
+        table.add_column("Name", style="cyan")
+        table.add_column("Path")
         table.add_column("Formats", style="green")
         table.add_column("Description")
 
-        for source in sources:
-            desc = source.description or ""
+        for s in sources:
+            desc = s.description or ""
             if len(desc) > 50:
                 desc = desc[:47] + "..."
             table.add_row(
-                str(source.path),
-                ", ".join(source.durable_formats[:3]),
-                desc
+                s.name,
+                str(s.path),
+                ", ".join(s.durable_formats[:3]),
+                desc,
             )
 
         console.print(table)
     else:
-        console.print(f"[bold]Found {len(sources)} ECHO source(s):[/bold]")
+        console.print(f"[bold]Found {len(sources)} source(s):[/bold]")
         console.print()
 
-        for source in sources:
-            console.print(f"[cyan]{source.path}[/cyan]")
-            if source.description:
-                desc = source.description
+        for s in sources:
+            console.print(f"  [cyan]{s.name}[/cyan]  {s.path}")
+            if s.description:
+                desc = s.description
                 if len(desc) > 80:
                     desc = desc[:77] + "..."
-                console.print(f"  [dim]{desc}[/dim]")
-            console.print(f"  Formats: {', '.join(source.durable_formats)}")
+                console.print(f"    [dim]{desc}[/dim]")
             console.print()
-
-
-@app.command()
-def search(
-    path: Path = typer.Argument(
-        ...,
-        help="Root directory to search.",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
-    ),
-    query: str = typer.Argument(
-        ...,
-        help="Search string to find in README files.",
-    ),
-    max_depth: Optional[int] = typer.Option(
-        None,
-        "--max-depth",
-        "-d",
-        help="Maximum directory depth to scan.",
-    ),
-):
-    """
-    Search ECHO sources by README content.
-
-    Finds ECHO-compliant directories whose README contains
-    the query string (case-insensitive).
-    """
-    sources = list(search_sources(path, query, max_depth))
-
-    if not sources:
-        console.print(f"[yellow]No ECHO sources matching '{query}' found[/yellow]")
-        return
-
-    console.print(f"[bold]Found {len(sources)} matching source(s):[/bold]")
-    console.print()
-
-    for source in sources:
-        console.print(f"[cyan]{source.path}[/cyan]")
-        if source.description:
-            desc = source.description
-            if len(desc) > 80:
-                desc = desc[:77] + "..."
-            console.print(f"  [dim]{desc}[/dim]")
-        console.print()
-
-
-@app.command()
-def info(
-    path: Path = typer.Argument(
-        ...,
-        help="ECHO source directory.",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
-    ),
-):
-    """
-    Show detailed information about an ECHO source.
-    """
-    source = get_source_info(path)
-
-    if not source:
-        result = check_compliance(path)
-        console.print(f"[red]Not an ECHO source:[/red] {result.reason}")
-        raise typer.Exit(code=1)
-
-    # Build info panel
-    info_lines = [
-        f"[bold]Path:[/bold] {source.path}",
-        f"[bold]README:[/bold] {source.readme_path.name}",
-    ]
-
-    if source.description:
-        info_lines.append(f"[bold]Description:[/bold] {source.description}")
-
-    info_lines.append(f"[bold]Durable formats:[/bold] {', '.join(source.durable_formats)}")
-
-    if source.formats:
-        other = [f for f in source.formats if f not in source.durable_formats]
-        if other:
-            info_lines.append(f"[bold]Other formats:[/bold] {', '.join(other)}")
-
-    panel = Panel(
-        "\n".join(info_lines),
-        title="ECHO Source",
-        border_style="green",
-    )
-    console.print(panel)
-
-
-@app.command()
-def formats():
-    """
-    List recognized durable formats.
-    """
-    console.print("[bold]ECHO Durable Formats[/bold]")
-    console.print()
-
-    categories = {
-        "Structured data": [".db", ".sqlite", ".sqlite3", ".json", ".jsonl"],
-        "Documents": [".md", ".markdown", ".txt", ".text", ".rst"],
-        "Archives": [".zip"],
-        "Images": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
-        "Data": [".csv", ".tsv", ".xml", ".yaml", ".yml"],
-    }
-
-    for category, extensions in categories.items():
-        console.print(f"[cyan]{category}:[/cyan]")
-        console.print(f"  {', '.join(extensions)}")
-        console.print()
 
 
 @app.command()
 def build(
     path: Path = typer.Argument(
         ...,
-        help="ECHO archive directory to build site for.",
+        help="Archive directory to build site for.",
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -297,80 +206,48 @@ def build(
         "-o",
         help="Output directory (default: path/site/).",
     ),
-    bundle: bool = typer.Option(
+    open_browser: bool = typer.Option(
         False,
-        "--bundle",
-        "-b",
-        help="Copy all sub-sites into unified site.",
+        "--open",
+        help="Open in browser after build.",
     ),
 ):
-    """
-    Build a static site from an ECHO archive.
-
-    Generates a unified browsable site from an ECHO archive and its
-    sub-sources. Reads manifest.yaml if present for configuration.
-    """
+    """Build a single-file static site from a longecho archive."""
     console.print(f"[bold]Building site for:[/bold] {path}")
 
-    result = build_site(
-        path=path,
-        output=output,
-        bundle=bundle,
-    )
+    result = build_site(path=path, output=output)
 
     if result.success:
-        console.print(f"[green]✓[/green] Built site with {result.sources_count} source(s)")
+        console.print(f"[green]\u2713[/green] Built site with {result.sources_count} source(s)")
         console.print(f"  [dim]Output:[/dim] {result.output_path}")
+
+        if open_browser and result.output_path:
+            import webbrowser
+            index = result.output_path / "index.html"
+            webbrowser.open(index.as_uri())
     else:
-        console.print(f"[red]✗[/red] Build failed: {result.error}")
+        console.print(f"[red]\u2717[/red] Build failed: {result.error}")
         raise typer.Exit(code=1)
 
 
 @app.command()
-def serve(
-    path: Path = typer.Argument(
-        ...,
-        help="ECHO archive directory to serve.",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
-    ),
-    port: int = typer.Option(
-        8000,
-        "--port",
-        "-p",
-        help="Port number to serve on.",
-    ),
-    no_build: bool = typer.Option(
-        False,
-        "--no-build",
-        help="Don't build site if missing.",
-    ),
-    open_browser: bool = typer.Option(
-        False,
-        "--open",
-        "-o",
-        help="Open browser automatically.",
-    ),
-):
-    """
-    Serve an ECHO archive via HTTP.
+def formats():
+    """List recognized durable formats by category."""
+    console.print("[bold]longecho Durable Formats[/bold]")
+    console.print()
 
-    Starts a local HTTP server to preview the archive site.
-    If no site exists, builds one first (unless --no-build is specified).
-    """
-    result = serve_archive(
-        path=path,
-        port=port,
-        build_if_missing=not no_build,
-        open_browser=open_browser,
-        quiet=False,
-    )
+    categories = {
+        "Structured data": [".db", ".sqlite", ".sqlite3", ".json", ".jsonl"],
+        "Documents": [".md", ".markdown", ".txt", ".text", ".rst"],
+        "Archives": [".zip"],
+        "Images": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
+        "Tabular / data": [".csv", ".tsv", ".xml", ".yaml", ".yml"],
+    }
 
-    if not result.success:
-        console.print(f"[red]✗[/red] Serve failed: {result.error}")
-        raise typer.Exit(code=1)
+    for category, extensions in categories.items():
+        console.print(f"[cyan]{category}:[/cyan]")
+        console.print(f"  {', '.join(extensions)}")
+        console.print()
 
 
 if __name__ == "__main__":

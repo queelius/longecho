@@ -1,6 +1,6 @@
-"""longecho -- ECHO compliance validator, discovery, and site builder."""
+"""longecho -- compliance validator, discovery, and site builder for durable personal archives."""
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .build import BuildResult, build_site
 from .checker import (
@@ -11,19 +11,15 @@ from .checker import (
     parse_readme,
 )
 from .discovery import discover_sources
-from .manifest import Manifest, SourceConfig, load_manifest
 
 __all__ = [
     "BuildResult",
     "ComplianceResult",
     "EchoSource",
-    "Manifest",
     "Readme",
-    "SourceConfig",
     "__version__",
     "build_site",
     "check_compliance",
     "discover_sources",
-    "load_manifest",
     "parse_readme",
 ]
