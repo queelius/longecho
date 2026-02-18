@@ -54,14 +54,9 @@ Note: `manifest.py` and `serve.py` are being removed per spec v2.
 4. **No parent overrides** — A source's name/description always comes from its own README
 5. **Single-file site** — Build output is a self-contained HTML file (SFA), works from `file://`
 
-## Documentation Structure
+## Documentation
 
-```
-spec/
-├── index.md             # Documentation index
-├── LONGECHO.md          # Unified spec (philosophy + tool)
-└── TOOLKIT-ECOSYSTEM.md # List of toolkits
-```
+Everything is in `README.md` — philosophy, spec, CLI reference, ecosystem. No separate spec directory.
 
 ## Development
 
