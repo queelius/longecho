@@ -153,7 +153,7 @@ def query(
             if s.frontmatter:
                 entry["frontmatter"] = make_json_safe(s.frontmatter)
             output.append(entry)
-        console.print(json.dumps(output, indent=2, ensure_ascii=False))
+        print(json.dumps(output, indent=2, ensure_ascii=False))
         return
 
     if not sources:
