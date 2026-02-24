@@ -6,14 +6,13 @@ from typing import Optional
 
 from .checker import EchoSource, check_compliance, find_readme
 
-# Directories to skip during discovery
-SKIP_DIRECTORIES = {
-    ".git", ".hg", ".svn",
-    "node_modules", "__pycache__", ".pytest_cache",
-    ".venv", "venv", ".env", "env",
-    ".tox", ".nox",
-    "dist", "build", "*.egg-info",
-    ".mypy_cache", ".ruff_cache",
+# Directories to skip during discovery (dot-prefixed dirs are always skipped
+# via the startswith(".") check in should_skip_directory, so only non-dot
+# names need to be listed here).
+SKIP_DIRECTORIES: set[str] = {
+    "node_modules", "__pycache__",
+    "venv", "env",
+    "dist", "build",
     "site-packages",
 }
 
@@ -58,25 +57,37 @@ def discover_sources(
     yield from scan_directory(root, 0)
 
 
+def _build_search_text(source: EchoSource) -> str:
+    """Build a searchable text blob from a source (name, description, README, frontmatter)."""
+    parts = [source.name, source.description]
+    try:
+        content = source.readme_path.read_text(encoding="utf-8")
+        parts.append(content)
+    except (OSError, UnicodeDecodeError):
+        pass
+    if source.frontmatter:
+        for v in source.frontmatter.values():
+            parts.append(str(v))
+    return " ".join(parts).lower()
+
+
+def matches_query(source: EchoSource, query: str) -> bool:
+    """Check if a source matches a text query. Case-insensitive substring match."""
+    if not query.strip():
+        return True
+    search_text = _build_search_text(source)
+    return query.strip().lower() in search_text
+
+
 def search_sources(
     root: Path,
     query: str,
     max_depth: Optional[int] = None
 ) -> Iterator[EchoSource]:
-    """Search longecho sources by README content (case-insensitive)."""
-    query_lower = query.lower()
-
+    """Search sources by text. Case-insensitive match against name, description, README, frontmatter."""
     for source in discover_sources(root, max_depth):
-        if source.description and query_lower in source.description.lower():
+        if matches_query(source, query):
             yield source
-            continue
-
-        try:
-            content = source.readme_path.read_text(encoding="utf-8")
-            if query_lower in content.lower():
-                yield source
-        except (OSError, UnicodeDecodeError):
-            pass
 
 
 def get_source_info(path: Path) -> Optional[EchoSource]:

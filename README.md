@@ -46,7 +46,7 @@ That's it. No special files, no schema, no version numbers.
 | Category | Formats |
 |----------|---------|
 | Structured data | `.db`, `.sqlite`, `.sqlite3`, `.json`, `.jsonl` |
-| Documents | `.md`, `.markdown`, `.txt`, `.text`, `.rst` |
+| Documents | `.md`, `.markdown`, `.txt`, `.text`, `.rst`, `.html`, `.htm` |
 | Archives | `.zip` |
 | Images | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif` |
 | Tabular / data | `.csv`, `.tsv`, `.xml`, `.yaml`, `.yml` |
@@ -235,6 +235,7 @@ longecho query ~/ --json               # Output as JSON
 longecho build ~/my-archive/           # Generate single-file static site
 longecho build ~/my-archive/ --open    # Open in browser after build
 
+longecho spec                          # Print specification summary
 longecho formats                       # List recognized durable formats
 ```
 

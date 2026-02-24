@@ -91,6 +91,52 @@ class TestQueryCommand:
         assert result.exit_code == 0
 
 
+    def test_query_shows_relative_paths(self, nested_echo_sources):
+        result = runner.invoke(app, ["query", str(nested_echo_sources)])
+
+        assert result.exit_code == 0
+        assert "./" in result.stdout
+
+    def test_query_shows_tree_indentation(self, nested_echo_sources):
+        """Deeper sources are indented more than shallow ones."""
+        result = runner.invoke(app, ["query", str(nested_echo_sources)])
+        assert result.exit_code == 0
+        # The root should be at the leftmost position (no leading spaces before name)
+        # Children should be indented
+        lines = result.stdout.split("\n")
+        # Find lines with source names (cyan-colored in rich output)
+        name_lines = [l for l in lines if "./" in l or l.strip().startswith(".")]
+        # At least one line should start with more spaces than another
+        indents = [len(l) - len(l.lstrip()) for l in name_lines if l.strip()]
+        if len(indents) > 1:
+            assert max(indents) > min(indents), "Expected varying indentation for tree display"
+
+
+class TestSpecCommand:
+    """Tests for the spec command."""
+
+    def test_spec_prints_summary(self):
+        result = runner.invoke(app, ["spec"])
+
+        assert result.exit_code == 0
+        assert "longecho" in result.stdout
+        assert "durable" in result.stdout.lower()
+        assert "README" in result.stdout
+
+    def test_spec_includes_formats(self):
+        result = runner.invoke(app, ["spec"])
+
+        assert ".db" in result.stdout
+        assert ".json" in result.stdout
+        assert ".html" in result.stdout
+
+    def test_spec_includes_principles(self):
+        result = runner.invoke(app, ["spec"])
+
+        assert "Self-Describing" in result.stdout
+        assert "Local-First" in result.stdout
+
+
 class TestBuildCommand:
     """Tests for the build command."""
 

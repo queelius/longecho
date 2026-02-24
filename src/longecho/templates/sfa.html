@@ -46,8 +46,9 @@
         h1 { font-weight: 600; margin-bottom: 0.5rem; }
         .description { color: var(--muted); font-size: 1.1rem; }
 
+        .search-container { margin-bottom: 1.5rem; }
+
         .search-box {
-            margin-bottom: 1.5rem;
             padding: 0.75rem 1rem;
             width: 100%;
             border: 1px solid var(--border);
@@ -58,6 +59,12 @@
         }
 
         .search-box:focus { outline: 2px solid var(--link); border-color: var(--link); }
+
+        .result-count {
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
 
         .breadcrumb { margin-bottom: 1rem; font-size: 0.9rem; }
         .breadcrumb a { color: var(--link); text-decoration: none; cursor: pointer; }
@@ -96,6 +103,9 @@
         .metadata-row { display: flex; margin-bottom: 0.25rem; }
         .metadata-label { font-weight: 500; width: 120px; flex-shrink: 0; }
         .metadata-value { color: var(--muted); }
+
+        .children-section { margin-top: 2rem; }
+        .children-section h3 { margin-bottom: 0.75rem; }
 
         .readme-content h1,
         .readme-content h2,
@@ -159,8 +169,11 @@
 
         <div id="breadcrumb" class="breadcrumb" hidden></div>
 
-        <input type="text" class="search-box" id="search"
-               placeholder="Search sources..." autocomplete="off">
+        <div class="search-container" id="search-container">
+            <input type="text" class="search-box" id="search"
+                   placeholder="Search sources..." autocomplete="off">
+            <div class="result-count" id="result-count"></div>
+        </div>
 
         <main id="main">
             <div class="sources" id="source-list"></div>
@@ -183,14 +196,66 @@
         var listEl = document.getElementById('source-list');
         var detailEl = document.getElementById('source-detail');
         var searchEl = document.getElementById('search');
+        var searchContainer = document.getElementById('search-container');
         var breadcrumbEl = document.getElementById('breadcrumb');
         var titleEl = document.getElementById('page-title');
         var descEl = document.getElementById('page-desc');
+        var resultCountEl = document.getElementById('result-count');
 
         var rootName = {{ name|tojson }};
         var rootDesc = {{ description|tojson }};
 
-        // Build a source card element using safe DOM methods
+        // Navigation stack: array of { name, sources } for breadcrumb
+        var navStack = [];
+
+        // Extract plain text from HTML for full-text search
+        function htmlToText(html) {
+            var div = document.createElement('div');
+            div.innerHTML = html;
+            return div.textContent || '';
+        }
+
+        // Recursively build search index for all sources
+        function buildSearchIndex(sources) {
+            for (var i = 0; i < sources.length; i++) {
+                var s = sources[i];
+                var parts = [s.name, s.description];
+                if (s.readme_html) parts.push(htmlToText(s.readme_html));
+                if (s.frontmatter) {
+                    var keys = Object.keys(s.frontmatter);
+                    for (var k = 0; k < keys.length; k++) {
+                        parts.push(String(s.frontmatter[keys[k]]));
+                    }
+                }
+                s._searchText = parts.join(' ').toLowerCase();
+                if (s.children && s.children.length) {
+                    buildSearchIndex(s.children);
+                }
+            }
+        }
+        buildSearchIndex(DATA);
+
+        // Flatten all sources (including nested) for global search
+        function flattenSources(sources) {
+            var result = [];
+            for (var i = 0; i < sources.length; i++) {
+                result.push(sources[i]);
+                if (sources[i].children && sources[i].children.length) {
+                    result = result.concat(flattenSources(sources[i].children));
+                }
+            }
+            return result;
+        }
+
+        var ALL_SOURCES = flattenSources(DATA);
+
+        // Plain text search: case-insensitive substring match against search index
+        function matchesQuery(source, text) {
+            if (!text) return true;
+            return source._searchText.indexOf(text.toLowerCase()) !== -1;
+        }
+
+        // Build a source card element
         function createCard(source, idx, attrName) {
             var card = document.createElement('div');
             card.className = 'source-card';
@@ -199,6 +264,9 @@
             var nameDiv = document.createElement('div');
             nameDiv.className = 'source-name';
             nameDiv.textContent = source.name;
+            if (source.children && source.children.length) {
+                nameDiv.textContent += ' (' + source.children.length + ')';
+            }
             card.appendChild(nameDiv);
 
             var descDiv = document.createElement('div');
@@ -206,12 +274,22 @@
             descDiv.textContent = source.description;
             card.appendChild(descDiv);
 
+            var metaParts = [];
             if (source.formats && source.formats.length) {
+                metaParts.push(source.formats.join(', '));
+            }
+            var fm = source.frontmatter || {};
+            if (fm.author) metaParts.push(fm.author);
+            if (fm.datetime) metaParts.push(String(fm.datetime));
+
+            if (metaParts.length) {
                 var metaDiv = document.createElement('div');
                 metaDiv.className = 'source-meta';
-                var span = document.createElement('span');
-                span.textContent = source.formats.join(', ');
-                metaDiv.appendChild(span);
+                for (var i = 0; i < metaParts.length; i++) {
+                    var span = document.createElement('span');
+                    span.textContent = metaParts[i];
+                    metaDiv.appendChild(span);
+                }
                 card.appendChild(metaDiv);
             }
 
@@ -220,24 +298,29 @@
 
         function renderList(sources, filter) {
             listEl.textContent = '';
-            var q = (filter || '').toLowerCase();
+            var text = (filter || '').trim();
+            var isSearching = text.length > 0;
+            var searchPool = isSearching ? ALL_SOURCES : sources;
             var count = 0;
 
-            for (var i = 0; i < sources.length; i++) {
-                var s = sources[i];
-                if (q && s.name.toLowerCase().indexOf(q) === -1 &&
-                    s.description.toLowerCase().indexOf(q) === -1) {
-                    continue;
-                }
+            for (var i = 0; i < searchPool.length; i++) {
+                if (isSearching && !matchesQuery(searchPool[i], text)) continue;
                 count++;
-                listEl.appendChild(createCard(s, i, 'idx'));
+                var card = createCard(searchPool[i], i, isSearching ? 'flat' : 'idx');
+                listEl.appendChild(card);
+            }
+
+            if (isSearching) {
+                resultCountEl.textContent = count + ' of ' + ALL_SOURCES.length + ' source(s)';
+            } else {
+                resultCountEl.textContent = sources.length + ' source(s)';
             }
 
             if (count === 0) {
                 var empty = document.createElement('div');
                 empty.className = 'empty-state';
                 var p = document.createElement('p');
-                p.textContent = 'No sources found.';
+                p.textContent = isSearching ? 'No sources match your search.' : 'No sources found.';
                 empty.appendChild(p);
                 listEl.appendChild(empty);
             }
@@ -316,49 +399,117 @@
                 detailEl.appendChild(filesDiv);
             }
 
+            // Children as navigable cards
+            if (source.children && source.children.length) {
+                var childSection = document.createElement('div');
+                childSection.className = 'children-section';
+                var ch3 = document.createElement('h3');
+                ch3.textContent = 'Contents (' + source.children.length + ')';
+                childSection.appendChild(ch3);
+
+                var childGrid = document.createElement('div');
+                childGrid.className = 'sources';
+                for (var c = 0; c < source.children.length; c++) {
+                    childGrid.appendChild(createCard(source.children[c], c, 'child'));
+                }
+                childSection.appendChild(childGrid);
+
+                // Handle clicks on child cards
+                childGrid.addEventListener('click', function(e) {
+                    var card = e.target.closest('.source-card');
+                    if (card && card.dataset.child !== undefined) {
+                        var childIdx = parseInt(card.dataset.child, 10);
+                        navigateTo(source.children[childIdx]);
+                    }
+                });
+
+                detailEl.appendChild(childSection);
+            }
         }
 
-        function showList() {
+        function renderBreadcrumb() {
+            breadcrumbEl.textContent = '';
+
+            // Root link
+            var rootLink = document.createElement('a');
+            rootLink.textContent = rootName;
+            rootLink.onclick = function() { navigateToRoot(); };
+            breadcrumbEl.appendChild(rootLink);
+
+            // Each nav stack entry
+            for (var i = 0; i < navStack.length; i++) {
+                breadcrumbEl.appendChild(document.createTextNode(' / '));
+                if (i < navStack.length - 1) {
+                    var link = document.createElement('a');
+                    link.textContent = navStack[i].name;
+                    (function(idx) {
+                        link.onclick = function() { navigateBack(idx); };
+                    })(i);
+                    breadcrumbEl.appendChild(link);
+                } else {
+                    breadcrumbEl.appendChild(document.createTextNode(navStack[i].name));
+                }
+            }
+
+            breadcrumbEl.hidden = navStack.length === 0;
+        }
+
+        function navigateToRoot() {
+            navStack = [];
             titleEl.textContent = rootName;
             descEl.textContent = rootDesc;
             breadcrumbEl.hidden = true;
             listEl.hidden = false;
             detailEl.hidden = true;
-            searchEl.hidden = false;
-            renderList(DATA, searchEl.value);
+            searchContainer.hidden = false;
+            searchEl.value = '';
+            renderList(DATA, '');
         }
 
-        function showDetail(idx) {
-            var source = DATA[idx];
+        function navigateTo(source) {
+            navStack.push(source);
             titleEl.textContent = source.name;
             descEl.textContent = source.description;
-
-            breadcrumbEl.textContent = '';
-            var link = document.createElement('a');
-            link.textContent = rootName;
-            link.onclick = showList;
-            breadcrumbEl.appendChild(link);
-            breadcrumbEl.appendChild(document.createTextNode(' / ' + source.name));
-
-            breadcrumbEl.hidden = false;
             listEl.hidden = true;
             detailEl.hidden = false;
-            searchEl.hidden = true;
+            searchContainer.hidden = true;
+            renderBreadcrumb();
             renderDetail(source);
         }
 
+        function navigateBack(idx) {
+            // Pop stack back to idx (inclusive — we want to view that source)
+            navStack = navStack.slice(0, idx + 1);
+            var source = navStack[navStack.length - 1];
+            titleEl.textContent = source.name;
+            descEl.textContent = source.description;
+            listEl.hidden = true;
+            detailEl.hidden = false;
+            searchContainer.hidden = true;
+            renderBreadcrumb();
+            renderDetail(source);
+        }
+
+        // Handle clicks on the top-level source list
         listEl.addEventListener('click', function(e) {
             var card = e.target.closest('.source-card');
-            if (card && card.dataset.idx) {
-                showDetail(parseInt(card.dataset.idx, 10));
+            if (!card) return;
+
+            if (card.dataset.idx !== undefined) {
+                navigateTo(DATA[parseInt(card.dataset.idx, 10)]);
+            } else if (card.dataset.flat !== undefined) {
+                // Global search result — navigate to the source from ALL_SOURCES
+                navigateTo(ALL_SOURCES[parseInt(card.dataset.flat, 10)]);
             }
         });
 
-        searchEl.addEventListener('input', function() {
+        function onSearchInput() {
             renderList(DATA, searchEl.value);
-        });
+        }
 
-        showList();
+        searchEl.addEventListener('input', onSearchInput);
+
+        navigateToRoot();
     })();
     </script>
 </body>

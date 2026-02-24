@@ -10,7 +10,7 @@ DURABLE_EXTENSIONS: set[str] = {
     # Structured data
     ".db", ".sqlite", ".sqlite3", ".json", ".jsonl",
     # Documents
-    ".md", ".markdown", ".txt", ".text", ".rst",
+    ".md", ".markdown", ".txt", ".text", ".rst", ".html", ".htm",
     # Archives
     ".zip",
     # Images
@@ -226,15 +226,13 @@ def check_compliance(path: Path) -> ComplianceResult:
     # Name cascade: frontmatter name > # Heading > dirname
     name = (readme.title if readme else None) or path.name
     description = (readme.summary if readme else None) or ""
-    frontmatter = None
+    frontmatter = readme.frontmatter if readme else None
     contents = None
 
-    if readme and readme.frontmatter:
-        fm = readme.frontmatter
-        frontmatter = fm
-        name = fm.get("name", name)
-        description = fm.get("description", description)
-        contents = _parse_contents(fm)
+    if frontmatter:
+        name = frontmatter.get("name", name)
+        description = frontmatter.get("description", description)
+        contents = _parse_contents(frontmatter)
 
     site_dir = path / "site"
     has_site = site_dir.exists() and (site_dir / "index.html").exists()

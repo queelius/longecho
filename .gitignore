@@ -1,5 +1,6 @@
 out/
 site/
+dev/
 __pycache__/
 *.pyc
 *.pyo

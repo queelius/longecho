@@ -9,6 +9,7 @@ from longecho.build import (
     BuildResult,
     build_site,
     discover_sub_sources,
+    make_json_safe,
     markdown_to_html,
 )
 from longecho.checker import check_compliance
@@ -304,3 +305,118 @@ class TestBuildWithSources:
         index_content = (result.output_path / "index.html").read_text()
         assert "Conversations" in index_content
         assert "Bookmarks" in index_content
+
+    def test_sfa_has_query_features(self, archive_with_sources):
+        """SFA should include text search functionality."""
+        result = build_site(archive_with_sources)
+        assert result.success is True
+
+        index_content = (result.output_path / "index.html").read_text()
+        assert "matchesQuery" in index_content
+        assert "Search sources" in index_content
+
+    def test_sfa_has_search_index(self, archive_with_sources):
+        """SFA should build a search index from README content."""
+        result = build_site(archive_with_sources)
+        assert result.success is True
+
+        index_content = (result.output_path / "index.html").read_text()
+        assert "_searchText" in index_content
+
+
+@pytest.fixture
+def nested_archive(temp_dir):
+    """Create a 3-level nested archive: root > conversations > chatgpt."""
+    (temp_dir / "README.md").write_text(
+        "---\nname: Root\ndescription: Root archive\n"
+        "contents:\n  - path: conversations/\n---\n"
+        "# Root\n\nRoot archive."
+    )
+    (temp_dir / "data.json").write_text("{}")
+
+    conv_dir = temp_dir / "conversations"
+    conv_dir.mkdir()
+    (conv_dir / "README.md").write_text(
+        "---\nname: Conversations\ndescription: Chat history\n"
+        "contents:\n  - path: chatgpt/\n---\n"
+        "# Conversations\n\nAll chats."
+    )
+    (conv_dir / "conversations.db").touch()
+
+    chatgpt_dir = conv_dir / "chatgpt"
+    chatgpt_dir.mkdir()
+    (chatgpt_dir / "README.md").write_text(
+        "---\nname: ChatGPT\ndescription: ChatGPT exports\n---\n"
+        "# ChatGPT\n\nExported from OpenAI."
+    )
+    (chatgpt_dir / "conversations.jsonl").write_text("")
+
+    return temp_dir
+
+
+class TestRecursiveBuild:
+    """Tests for recursive nested source building."""
+
+    def test_builds_nested_children(self, nested_archive):
+        result = build_site(nested_archive)
+        assert result.success is True
+
+        index_content = (result.output_path / "index.html").read_text()
+        # All three levels should appear in the SFA
+        assert "Conversations" in index_content
+        assert "ChatGPT" in index_content
+
+    def test_counts_all_nested_sources(self, nested_archive):
+        result = build_site(nested_archive)
+        assert result.success is True
+        # 1 (conversations) + 1 (chatgpt) = 2 total
+        assert result.sources_count == 2
+
+    def test_children_in_json_structure(self, nested_archive):
+        """Verify the JSON data has nested children arrays."""
+        import re
+        result = build_site(nested_archive)
+        assert result.success is True
+
+        index_content = (result.output_path / "index.html").read_text()
+        match = re.search(r'var DATA = (.+?);\n', index_content)
+        assert match is not None
+        data = json.loads(match.group(1))
+
+        # Root has 1 child (conversations)
+        assert len(data) == 1
+        assert data[0]["name"] == "Conversations"
+        # Conversations has 1 child (chatgpt)
+        assert len(data[0]["children"]) == 1
+        assert data[0]["children"][0]["name"] == "ChatGPT"
+        # ChatGPT has no children
+        assert len(data[0]["children"][0]["children"]) == 0
+
+
+class TestMakeJsonSafe:
+    """Tests for make_json_safe function."""
+
+    def test_converts_date(self):
+        from datetime import date
+        result = make_json_safe({"date": date(2026, 2, 18)})
+        assert result == {"date": "2026-02-18"}
+        # Verify it's actually JSON-serializable
+        json.dumps(result)
+
+    def test_converts_datetime(self):
+        from datetime import datetime
+        dt = datetime(2026, 2, 18, 14, 30, 0)
+        result = make_json_safe({"created": dt})
+        assert result == {"created": "2026-02-18T14:30:00"}
+        json.dumps(result)
+
+    def test_handles_nested(self):
+        from datetime import date
+        data = {"meta": {"date": date(2026, 1, 1)}, "items": [date(2025, 6, 15)]}
+        result = make_json_safe(data)
+        assert result == {"meta": {"date": "2026-01-01"}, "items": ["2025-06-15"]}
+        json.dumps(result)
+
+    def test_passes_through_normal_types(self):
+        data = {"name": "test", "count": 42, "flag": True, "items": [1, "two"]}
+        assert make_json_safe(data) == data

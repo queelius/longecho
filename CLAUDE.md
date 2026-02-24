@@ -4,7 +4,7 @@ Guidance for Claude Code when working with this repository.
 
 ## Project Status
 
-**Alpha.** Spec v2 implemented. 97 tests, 94% coverage.
+**Alpha.** Spec v2 implemented. 109 tests.
 
 ## What longecho Is
 
@@ -21,6 +21,7 @@ longecho query ~/                  # Find/search/filter sources across the tree
 longecho query ~/ --search "term"  # Search README text
 longecho query ~/ --json           # Output as JSON
 longecho build ~/archive           # Generate single-file static site
+longecho spec                      # Print specification summary
 longecho formats                   # List recognized durable formats
 ```
 

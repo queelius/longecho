@@ -2,14 +2,14 @@
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from . import __version__
-from .checker import EchoSource, check_compliance, find_readme
+from .checker import EchoSource, check_compliance
 from .discovery import should_skip_directory
 
 
@@ -119,30 +119,45 @@ def discover_sub_sources(source: EchoSource) -> list[EchoSource]:
     return sources
 
 
+def make_json_safe(obj: object) -> object:
+    """Recursively convert non-JSON-serializable types (e.g. datetime.date) to strings."""
+    if isinstance(obj, dict):
+        return {k: make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [make_json_safe(v) for v in obj]
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    return obj
+
+
 def _source_to_json(source: EchoSource, output_path: Path) -> dict:
-    """Convert an EchoSource to a JSON-serializable dict for the SFA."""
+    """Convert an EchoSource to a JSON-serializable dict for the SFA, recursively."""
     readme_html = ""
-    readme_path = find_readme(source.path)
-    if readme_path:
-        try:
-            content = readme_path.read_text(encoding="utf-8")
-            readme_html = markdown_to_html(content)
-        except (OSError, UnicodeDecodeError):
-            pass
+    try:
+        content = source.readme_path.read_text(encoding="utf-8")
+        readme_html = markdown_to_html(content)
+    except (OSError, UnicodeDecodeError):
+        pass
+
+    frontmatter: dict = make_json_safe(source.frontmatter or {})  # type: ignore[assignment]
+
+    # Recursively discover and convert children
+    child_sources = discover_sub_sources(source)
+    children = [_source_to_json(c, output_path) for c in child_sources]
 
     return {
         "name": source.name,
         "description": source.description,
         "formats": source.durable_formats,
-        "frontmatter": source.frontmatter or {},
+        "frontmatter": frontmatter,
         "readme_html": readme_html,
         "data_files": _get_data_files(source, output_path),
+        "children": children,
     }
 
 
 def _generate_site_readme(
     name: str,
-    description: str,
     sources: list[EchoSource],
     output_path: Path,
 ) -> None:
@@ -168,6 +183,14 @@ def _generate_site_readme(
     readme_path.write_text(content, encoding="utf-8")
 
 
+def _count_sources(data: list[dict]) -> int:
+    """Count all sources including nested children."""
+    total = len(data)
+    for s in data:
+        total += _count_sources(s.get("children", []))
+    return total
+
+
 def build_site(
     path: Path,
     output: Optional[Path] = None,
@@ -189,22 +212,18 @@ def build_site(
         )
 
     root_source = result.source
-    name = root_source.name
-    description = root_source.description
-
     sources = discover_sub_sources(root_source)
 
     output_path = Path(output).resolve() if output else path / "site"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Build JSON data for each source
     sources_data = [_source_to_json(s, output_path) for s in sources]
 
     env = get_jinja_env()
     template = env.get_template("sfa.html")
     html = template.render(
-        name=name,
-        description=description,
+        name=root_source.name,
+        description=root_source.description,
         sources_data=sources_data,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
@@ -212,10 +231,10 @@ def build_site(
     index_path = output_path / "index.html"
     index_path.write_text(html, encoding="utf-8")
 
-    _generate_site_readme(name, description, sources, output_path)
+    _generate_site_readme(root_source.name, sources, output_path)
 
     return BuildResult(
         success=True,
         output_path=output_path,
-        sources_count=len(sources),
+        sources_count=_count_sources(sources_data),
     )

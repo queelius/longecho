@@ -97,6 +97,10 @@ class TestIsDurableFormat:
     def test_text_is_durable(self):
         assert is_durable_format(".txt")
 
+    def test_html_is_durable(self):
+        assert is_durable_format(".html")
+        assert is_durable_format(".htm")
+
     def test_handles_no_dot(self):
         assert is_durable_format("json")
         assert is_durable_format("md")

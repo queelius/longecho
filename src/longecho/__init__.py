@@ -10,7 +10,7 @@ from .checker import (
     check_compliance,
     parse_readme,
 )
-from .discovery import discover_sources
+from .discovery import discover_sources, matches_query, search_sources
 
 __all__ = [
     "BuildResult",
@@ -21,5 +21,7 @@ __all__ = [
     "build_site",
     "check_compliance",
     "discover_sources",
+    "matches_query",
     "parse_readme",
+    "search_sources",
 ]

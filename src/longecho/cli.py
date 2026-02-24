@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
-from .build import build_site
+from .build import build_site, make_json_safe
 from .checker import check_compliance
 from .discovery import discover_sources, search_sources
 
@@ -22,7 +22,14 @@ app = typer.Typer(
 console = Console()
 
 
-def version_callback(value: bool):
+def _truncate(text: str, max_length: int) -> str:
+    """Truncate text to max_length, adding ellipsis if needed."""
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 3] + "..."
+
+
+def version_callback(value: bool) -> None:
     if value:
         console.print(f"longecho version {__version__}")
         raise typer.Exit()
@@ -53,8 +60,8 @@ def main(
 @app.command()
 def check(
     path: Path = typer.Argument(
-        ...,
-        help="Directory to check for compliance.",
+        ".",
+        help="Directory to check for compliance (default: current directory).",
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -78,10 +85,7 @@ def check(
             console.print()
             console.print(f"  [dim]README:[/dim] {s.readme_path.name}")
             if s.description:
-                desc = s.description
-                if len(desc) > 100:
-                    desc = desc[:97] + "..."
-                console.print(f"  [dim]Description:[/dim] {desc}")
+                console.print(f"  [dim]Description:[/dim] {_truncate(s.description, 100)}")
             console.print(f"  [dim]Durable formats:[/dim] {', '.join(s.durable_formats)}")
             other = [f for f in s.formats if f not in s.durable_formats]
             if other:
@@ -99,8 +103,8 @@ def check(
 @app.command()
 def query(
     path: Path = typer.Argument(
-        ...,
-        help="Root directory to search.",
+        ".",
+        help="Root directory to search (default: current directory).",
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -110,7 +114,7 @@ def query(
         None,
         "--search",
         "-s",
-        help="Search README text (case-insensitive).",
+        help="Text to search for in names, descriptions, and READMEs.",
     ),
     depth: Optional[int] = typer.Option(
         None,
@@ -147,7 +151,7 @@ def query(
                 "durable_formats": s.durable_formats,
             }
             if s.frontmatter:
-                entry["frontmatter"] = s.frontmatter
+                entry["frontmatter"] = make_json_safe(s.frontmatter)
             output.append(entry)
         console.print(json.dumps(output, indent=2, ensure_ascii=False))
         return
@@ -165,14 +169,11 @@ def query(
         table.add_column("Description")
 
         for s in sources:
-            desc = s.description or ""
-            if len(desc) > 50:
-                desc = desc[:47] + "..."
             table.add_row(
                 s.name,
                 str(s.path),
                 ", ".join(s.durable_formats[:3]),
-                desc,
+                _truncate(s.description or "", 50),
             )
 
         console.print(table)
@@ -181,20 +182,27 @@ def query(
         console.print()
 
         for s in sources:
-            console.print(f"  [cyan]{s.name}[/cyan]  {s.path}")
+            # Compute indentation and relative path from query root
+            try:
+                rel = s.path.relative_to(path)
+                depth_level = len(rel.parts)
+                display_path = f"./{rel}" if str(rel) != "." else "."
+            except ValueError:
+                depth_level = 1
+                display_path = str(s.path)
+            indent = "  " * depth_level
+
+            console.print(f"{indent}[cyan]{s.name}[/cyan]  [dim]{display_path}[/dim]")
             if s.description:
-                desc = s.description
-                if len(desc) > 80:
-                    desc = desc[:77] + "..."
-                console.print(f"    [dim]{desc}[/dim]")
+                console.print(f"{indent}  [dim]{_truncate(s.description, 80)}[/dim]")
             console.print()
 
 
 @app.command()
 def build(
     path: Path = typer.Argument(
-        ...,
-        help="Archive directory to build site for.",
+        ".",
+        help="Archive directory to build site for (default: current directory).",
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -230,6 +238,57 @@ def build(
         raise typer.Exit(code=1)
 
 
+SPEC_TEXT = """\
+longecho — a philosophy and tool for durable personal archives.
+
+A directory is longecho-compliant if it has:
+  1. A README.md or README.txt explaining the data
+  2. Data stored in durable formats
+
+Core Principles:
+  Self-Describing  Every collection explains itself via README
+  Durable Formats  Formats readable without proprietary software
+  Graceful Degradation  Works with LLMs, browsers, file browsers, or text editors
+  Local-First     Complete without cloud services
+  Trust the Future  Simple over "correct" — future humans are smart
+
+The README:
+  The README is the interface. Optional YAML frontmatter adds structured metadata.
+  Special fields: name, description, contents (controls build curation/ordering).
+  All other frontmatter is preserved, displayed, and queryable.
+
+  Name cascade: frontmatter name > # Heading > directory name
+
+Nesting:
+  Sources can contain other sources. Structure is recursive — every level is
+  the same kind of object, self-describing even if fragmented.
+
+  The contents field lists what's in a directory. When present, it controls
+  curation (only listed entries built) and ordering. When absent, the tool
+  auto-discovers compliant subdirectories alphabetically.
+
+Durable Formats:
+  Structured:  .db .sqlite .sqlite3 .json .jsonl
+  Documents:   .md .markdown .txt .text .rst .html .htm
+  Archives:    .zip
+  Images:      .jpg .jpeg .png .webp .gif
+  Tabular:     .csv .tsv .xml .yaml .yml
+
+The site/ Convention:
+  longecho build generates a single-file application (site/index.html) with all
+  content inlined. Works from file:// — no server needed. The site/ directory
+  is itself longecho-compliant.
+
+Full spec: https://github.com/queelius/longecho
+"""
+
+
+@app.command()
+def spec():
+    """Print the longecho specification summary."""
+    console.print(SPEC_TEXT.rstrip())
+
+
 @app.command()
 def formats():
     """List recognized durable formats by category."""
@@ -238,7 +297,7 @@ def formats():
 
     categories = {
         "Structured data": [".db", ".sqlite", ".sqlite3", ".json", ".jsonl"],
-        "Documents": [".md", ".markdown", ".txt", ".text", ".rst"],
+        "Documents": [".md", ".markdown", ".txt", ".text", ".rst", ".html", ".htm"],
         "Archives": [".zip"],
         "Images": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
         "Tabular / data": [".csv", ".tsv", ".xml", ".yaml", ".yml"],
