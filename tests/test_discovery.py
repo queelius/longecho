@@ -76,7 +76,6 @@ class TestMatchesQuery:
             readme_path=readme_path,
             name=name,
             description=description,
-            formats=durable_formats or [".json"],
             durable_formats=durable_formats or [".json"],
             frontmatter=frontmatter,
         )

@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
-from .checker import EchoSource, check_compliance, find_readme
+from .checker import EchoSource, check_compliance
 
 # Directories to skip during discovery (dot-prefixed dirs are always skipped
 # via the startswith(".") check in should_skip_directory, so only non-dot
@@ -38,11 +38,9 @@ def discover_sources(
             return
 
         try:
-            readme = find_readme(path)
-            if readme:
-                result = check_compliance(path)
-                if result.compliant and result.source:
-                    yield result.source
+            result = check_compliance(path)
+            if result.compliant and result.source:
+                yield result.source
 
             for item in sorted(path.iterdir()):
                 if not item.is_dir():

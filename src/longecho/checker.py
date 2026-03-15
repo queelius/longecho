@@ -6,17 +6,19 @@ from typing import Optional
 
 import yaml
 
+# Single source of truth for durable format categories.
+# All display, spec, and compliance logic derives from this structure.
+DURABLE_FORMAT_CATEGORIES: dict[str, list[str]] = {
+    "Structured data": [".db", ".sqlite", ".sqlite3", ".json", ".jsonl"],
+    "Documents": [".md", ".markdown", ".txt", ".text", ".rst", ".html", ".htm"],
+    "Archives": [".zip"],
+    "Images": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
+    "Tabular / data": [".csv", ".tsv", ".xml", ".yaml", ".yml"],
+}
+
+# Derived flat set for O(1) membership testing
 DURABLE_EXTENSIONS: set[str] = {
-    # Structured data
-    ".db", ".sqlite", ".sqlite3", ".json", ".jsonl",
-    # Documents
-    ".md", ".markdown", ".txt", ".text", ".rst", ".html", ".htm",
-    # Archives
-    ".zip",
-    # Images
-    ".jpg", ".jpeg", ".png", ".webp", ".gif",
-    # Tabular / data
-    ".csv", ".tsv", ".xml", ".yaml", ".yml",
+    ext for exts in DURABLE_FORMAT_CATEGORIES.values() for ext in exts
 }
 
 EXCLUDE_PATTERNS: set[str] = {
@@ -41,7 +43,7 @@ class Readme:
     summary: Optional[str]
 
 
-def split_frontmatter(content: str) -> tuple[Optional[dict], str]:
+def _split_frontmatter(content: str) -> tuple[Optional[dict], str]:
     """Split YAML frontmatter from markdown content.
 
     Returns (frontmatter dict or None, remaining body).
@@ -74,7 +76,7 @@ def parse_readme(readme_path: Path) -> Optional[Readme]:
     except (OSError, UnicodeDecodeError):
         return None
 
-    frontmatter, body = split_frontmatter(content)
+    frontmatter, body = _split_frontmatter(content)
 
     title = None
     summary_lines: list[str] = []
@@ -112,7 +114,6 @@ class EchoSource:
     readme_path: Path
     name: str
     description: str
-    formats: list[str] = field(default_factory=list)
     durable_formats: list[str] = field(default_factory=list)
     has_site: bool = False
     site_path: Optional[Path] = None
@@ -150,9 +151,9 @@ def find_readme(path: Path) -> Optional[Path]:
     return None
 
 
-def detect_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> list[str]:
-    """Detect file formats in a directory up to max_depth."""
-    formats = set()
+def detect_durable_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> list[str]:
+    """Detect durable file formats in a directory up to max_depth."""
+    found: set[str] = set()
 
     def scan_directory(dir_path: Path, depth: int):
         if depth > max_depth:
@@ -166,15 +167,15 @@ def detect_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> li
                 if item.is_file():
                     if item.name not in EXCLUDE_PATTERNS:
                         suffix = item.suffix.lower()
-                        if suffix:
-                            formats.add(suffix)
+                        if suffix in DURABLE_EXTENSIONS:
+                            found.add(suffix)
                 elif item.is_dir():
                     scan_directory(item, depth + 1)
         except PermissionError:
             pass
 
     scan_directory(path, 0)
-    return sorted(formats)
+    return sorted(found)
 
 
 def is_durable_format(extension: str) -> bool:
@@ -213,8 +214,7 @@ def check_compliance(path: Path) -> ComplianceResult:
             compliant=False, path=path, reason="No README.md or README.txt found"
         )
 
-    formats = detect_formats(path)
-    durable = [f for f in formats if is_durable_format(f)]
+    durable = detect_durable_formats(path)
 
     if not durable:
         return ComplianceResult(
@@ -243,7 +243,6 @@ def check_compliance(path: Path) -> ComplianceResult:
         readme_path=readme_file,
         name=name,
         description=description,
-        formats=formats,
         durable_formats=durable,
         has_site=has_site,
         site_path=site_path,

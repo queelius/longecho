@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 longecho is both a philosophy and a tool for durable personal archives. A directory is longecho-compliant if it has a README.md/README.txt + data in durable formats. The CLI validates compliance, queries archives, and builds single-file browsable sites.
 
-**Status:** Alpha. 119 tests, 94% coverage.
+**Status:** Alpha.
 
 ## Commands
 
@@ -36,7 +36,7 @@ ruff check src/longecho/
 
 Five modules, each with a clear responsibility:
 
-- **checker.py** — Core data model (`Readme`, `EchoSource`, `ComplianceResult`) and compliance logic. Parses READMEs (frontmatter + body), detects durable formats, checks compliance. The `DURABLE_EXTENSIONS` set is the single source of truth for format recognition.
+- **checker.py** — Core data model (`Readme`, `EchoSource`, `ComplianceResult`) and compliance logic. Parses READMEs (frontmatter + body), detects durable formats, checks compliance. `DURABLE_FORMAT_CATEGORIES` is the single source of truth — a dict mapping category names to extension lists. `DURABLE_EXTENSIONS` is derived from it. All display/spec commands use the categories dict.
 - **discovery.py** — Tree-walking (`discover_sources`) and text search (`search_sources`, `matches_query`). Search builds a text blob from name + description + README body + frontmatter values, then does case-insensitive substring matching.
 - **build.py** — SFA (Single-File Application) generation. `_source_to_json` recursively converts sources to JSON including `children`. `discover_sub_sources` uses the `contents` frontmatter field for curated ordering, or auto-discovers alphabetically. `make_json_safe` handles `datetime.date` objects from YAML parsing.
 - **cli.py** — Typer CLI. All commands default path to `"."`. JSON output uses `print()` not `console.print()` (Rich wraps lines, breaking JSON).

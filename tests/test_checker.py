@@ -3,13 +3,32 @@
 from pathlib import Path
 
 from longecho.checker import (
+    DURABLE_EXTENSIONS,
+    DURABLE_FORMAT_CATEGORIES,
     ComplianceResult,
     EchoSource,
     check_compliance,
-    detect_formats,
+    detect_durable_formats,
     find_readme,
     is_durable_format,
 )
+
+
+class TestDurableFormatCategories:
+    """Tests for the format category structure."""
+
+    def test_extensions_derived_from_categories(self):
+        """DURABLE_EXTENSIONS should contain every extension from every category."""
+        for exts in DURABLE_FORMAT_CATEGORIES.values():
+            for ext in exts:
+                assert ext in DURABLE_EXTENSIONS
+
+    def test_no_extra_extensions(self):
+        """DURABLE_EXTENSIONS should contain only extensions from categories."""
+        all_from_categories = {
+            ext for exts in DURABLE_FORMAT_CATEGORIES.values() for ext in exts
+        }
+        assert DURABLE_EXTENSIONS == all_from_categories
 
 
 class TestFindReadme:
@@ -48,15 +67,15 @@ class TestFindReadme:
         assert result is None
 
 
-class TestDetectFormats:
-    """Tests for detect_formats function."""
+class TestDetectDurableFormats:
+    """Tests for detect_durable_formats function."""
 
     def test_detects_common_formats(self, temp_dir):
         (temp_dir / "data.db").touch()
         (temp_dir / "config.json").write_text("{}")
         (temp_dir / "notes.md").write_text("# Notes")
 
-        formats = detect_formats(temp_dir)
+        formats = detect_durable_formats(temp_dir)
         assert ".db" in formats
         assert ".json" in formats
         assert ".md" in formats
@@ -65,16 +84,26 @@ class TestDetectFormats:
         (temp_dir / "README.md").write_text("# Test")
         (temp_dir / "data.json").write_text("{}")
 
-        formats = detect_formats(temp_dir)
+        formats = detect_durable_formats(temp_dir)
         assert ".json" in formats
         assert ".md" not in formats  # README.md is excluded
+
+    def test_excludes_non_durable(self, temp_dir):
+        (temp_dir / "data.json").write_text("{}")
+        (temp_dir / "config.ini").write_text("[section]")
+        (temp_dir / "script.sh").write_text("#!/bin/bash")
+
+        formats = detect_durable_formats(temp_dir)
+        assert ".json" in formats
+        assert ".ini" not in formats
+        assert ".sh" not in formats
 
     def test_respects_max_depth(self, temp_dir):
         (temp_dir / "level1" / "level2" / "level3").mkdir(parents=True)
         (temp_dir / "level1" / "level2" / "level3" / "deep.json").write_text("{}")
         (temp_dir / "shallow.txt").write_text("shallow")
 
-        formats = detect_formats(temp_dir, max_depth=1)
+        formats = detect_durable_formats(temp_dir, max_depth=1)
         assert ".txt" in formats
 
 
@@ -226,7 +255,6 @@ class TestEchoSource:
             name="test",
             description="desc",
         )
-        assert source.formats == []
         assert source.durable_formats == []
         assert source.has_site is False
         assert source.site_path is None

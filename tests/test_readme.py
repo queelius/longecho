@@ -2,38 +2,38 @@
 
 import datetime
 
-from longecho.checker import parse_readme, split_frontmatter
+from longecho.checker import _split_frontmatter, parse_readme
 
 
 class TestSplitFrontmatter:
-    """Tests for split_frontmatter function."""
+    """Tests for _split_frontmatter function."""
 
     def test_no_frontmatter(self):
-        fm, body = split_frontmatter("# Title\n\nContent here.")
+        fm, body = _split_frontmatter("# Title\n\nContent here.")
         assert fm is None
         assert body == "# Title\n\nContent here."
 
     def test_yaml_frontmatter(self):
         content = "---\ntitle: Hello\ndate: 2024-01-15\n---\n# Title\n\nContent."
-        fm, body = split_frontmatter(content)
+        fm, body = _split_frontmatter(content)
         assert fm == {"title": "Hello", "date": datetime.date(2024, 1, 15)}
         assert body.strip() == "# Title\n\nContent."
 
     def test_empty_frontmatter(self):
         content = "---\n---\n# Title"
-        fm, body = split_frontmatter(content)
+        fm, body = _split_frontmatter(content)
         assert fm is None  # empty YAML returns None
         assert "# Title" in body
 
     def test_no_closing_delimiter(self):
         content = "---\ntitle: Hello\n# No closing delimiter"
-        fm, body = split_frontmatter(content)
+        fm, body = _split_frontmatter(content)
         assert fm is None  # malformed = no frontmatter
         assert content == body  # return original content as body
 
     def test_frontmatter_must_start_at_beginning(self):
         content = "Some text\n---\ntitle: Hello\n---\nMore text"
-        fm, body = split_frontmatter(content)
+        fm, body = _split_frontmatter(content)
         assert fm is None
         assert body == content
 

@@ -4,6 +4,7 @@ __version__ = "0.3.0"
 
 from .build import BuildResult, build_site
 from .checker import (
+    DURABLE_FORMAT_CATEGORIES,
     ComplianceResult,
     EchoSource,
     Readme,
@@ -15,6 +16,7 @@ from .discovery import discover_sources, matches_query, search_sources
 __all__ = [
     "BuildResult",
     "ComplianceResult",
+    "DURABLE_FORMAT_CATEGORIES",
     "EchoSource",
     "Readme",
     "__version__",

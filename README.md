@@ -216,7 +216,7 @@ The build is bottom-up: leaf sources are built first, then their parents incorpo
 ## Installation
 
 ```bash
-pip install longecho
+pip install -e ".[dev]"   # from source (not yet on PyPI)
 ```
 
 ## Commands
@@ -243,15 +243,16 @@ longecho formats                       # List recognized durable formats
 
 ## Ecosystem
 
-Standalone toolkits produce longecho-compliant data. Each is self-contained — works without longecho, defines its own formats, documented in its own repo.
+Tools that produce longecho-compliant data. Each is self-contained — works without longecho, documented in its own repo. All share the `longecho-ecosystem` GitHub topic.
 
-| Toolkit | What it manages |
-|---------|-----------------|
-| ctk | AI conversations |
-| btk | Bookmarks |
-| ebk | Ebooks |
-| mtk | Mail |
-| repoindex | Git repos |
+| Tool | What it manages |
+|------|-----------------|
+| [memex](https://github.com/queelius/memex) | Conversation knowledge base |
+| [chartfold](https://github.com/queelius/chartfold) | Personal health data |
+| [repoindex](https://github.com/queelius/repoindex) | Git repo metadata |
+| [jot](https://github.com/queelius/jot) | Plaintext journal/notes |
+| [pagevault](https://github.com/queelius/pagevault) | Password-protected static content |
+| arkiv | Universal personal data format (JSONL→SQL) |
 
 Markdown-based sources (Hugo, Jekyll, Obsidian, etc.) are inherently longecho-compliant.
 

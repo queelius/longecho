@@ -10,7 +10,7 @@ from rich.table import Table
 
 from . import __version__
 from .build import build_site, make_json_safe
-from .checker import check_compliance
+from .checker import DURABLE_FORMAT_CATEGORIES, check_compliance
 from .discovery import discover_sources, search_sources
 
 app = typer.Typer(
@@ -87,9 +87,6 @@ def check(
             if s.description:
                 console.print(f"  [dim]Description:[/dim] {_truncate(s.description, 100)}")
             console.print(f"  [dim]Durable formats:[/dim] {', '.join(s.durable_formats)}")
-            other = [f for f in s.formats if f not in s.durable_formats]
-            if other:
-                console.print(f"  [dim]Other formats:[/dim] {', '.join(other)}")
             if s.frontmatter:
                 for key, val in s.frontmatter.items():
                     if key not in ("name", "description", "contents"):
@@ -144,8 +141,13 @@ def query(
     if json_format:
         output: list[dict] = []
         for s in sources:
+            try:
+                rel = str(s.path.relative_to(path))
+                display_path = f"./{rel}" if rel != "." else "."
+            except ValueError:
+                display_path = str(s.path)
             entry: dict = {
-                "path": str(s.path),
+                "path": display_path,
                 "name": s.name,
                 "description": s.description,
                 "durable_formats": s.durable_formats,
@@ -184,9 +186,9 @@ def query(
         for s in sources:
             # Compute indentation and relative path from query root
             try:
-                rel = s.path.relative_to(path)
-                depth_level = len(rel.parts)
-                display_path = f"./{rel}" if str(rel) != "." else "."
+                rel_path = s.path.relative_to(path)
+                depth_level = len(rel_path.parts)
+                display_path = f"./{rel_path}" if str(rel_path) != "." else "."
             except ValueError:
                 depth_level = 1
                 display_path = str(s.path)
@@ -238,55 +240,63 @@ def build(
         raise typer.Exit(code=1)
 
 
-SPEC_TEXT = """\
-longecho — a philosophy and tool for durable personal archives.
-
-A directory is longecho-compliant if it has:
-  1. A README.md or README.txt explaining the data
-  2. Data stored in durable formats
-
-Core Principles:
-  Self-Describing  Every collection explains itself via README
-  Durable Formats  Formats readable without proprietary software
-  Graceful Degradation  Works with LLMs, browsers, file browsers, or text editors
-  Local-First     Complete without cloud services
-  Trust the Future  Simple over "correct" — future humans are smart
-
-The README:
-  The README is the interface. Optional YAML frontmatter adds structured metadata.
-  Special fields: name, description, contents (controls build curation/ordering).
-  All other frontmatter is preserved, displayed, and queryable.
-
-  Name cascade: frontmatter name > # Heading > directory name
-
-Nesting:
-  Sources can contain other sources. Structure is recursive — every level is
-  the same kind of object, self-describing even if fragmented.
-
-  The contents field lists what's in a directory. When present, it controls
-  curation (only listed entries built) and ordering. When absent, the tool
-  auto-discovers compliant subdirectories alphabetically.
-
-Durable Formats:
-  Structured:  .db .sqlite .sqlite3 .json .jsonl
-  Documents:   .md .markdown .txt .text .rst .html .htm
-  Archives:    .zip
-  Images:      .jpg .jpeg .png .webp .gif
-  Tabular:     .csv .tsv .xml .yaml .yml
-
-The site/ Convention:
-  longecho build generates a single-file application (site/index.html) with all
-  content inlined. Works from file:// — no server needed. The site/ directory
-  is itself longecho-compliant.
-
-Full spec: https://github.com/queelius/longecho
-"""
+def _format_spec() -> str:
+    """Generate the spec summary from structured data."""
+    lines = [
+        "longecho — a philosophy and tool for durable personal archives.",
+        "",
+        "A directory is longecho-compliant if it has:",
+        "  1. A README.md or README.txt explaining the data",
+        "  2. Data stored in durable formats",
+        "",
+        "Core Principles:",
+        "  Self-Describing  Every collection explains itself via README",
+        "  Durable Formats  Formats readable without proprietary software",
+        "  Graceful Degradation  Works with LLMs, browsers, file browsers, or text editors",
+        "  Local-First     Complete without cloud services",
+        "  Trust the Future  Simple over \"correct\" — future humans are smart",
+        "",
+        "The README:",
+        "  The README is the interface. Optional YAML frontmatter adds structured metadata.",
+        "  Special fields: name, description, contents (controls build curation/ordering).",
+        "  All other frontmatter is preserved, displayed, and queryable.",
+        "",
+        "  Name cascade: frontmatter name > # Heading > directory name",
+        "",
+        "Nesting:",
+        "  Sources can contain other sources. Structure is recursive — every level is",
+        "  the same kind of object, self-describing even if fragmented.",
+        "",
+        "  The contents field lists what's in a directory. When present, it controls",
+        "  curation (only listed entries built) and ordering. When absent, the tool",
+        "  auto-discovers compliant subdirectories alphabetically.",
+        "",
+        "Durable Formats:",
+    ]
+    # Derive format display from the single source of truth
+    short_names = {
+        "Structured data": "Structured",
+        "Tabular / data": "Tabular",
+    }
+    for category, extensions in DURABLE_FORMAT_CATEGORIES.items():
+        label = short_names.get(category, category)
+        lines.append(f"  {label + ':':<13s} {' '.join(extensions)}")
+    lines += [
+        "",
+        "The site/ Convention:",
+        "  longecho build generates a single-file application (site/index.html) with all",
+        "  content inlined. Works from file:// — no server needed. The site/ directory",
+        "  is itself longecho-compliant.",
+        "",
+        "Full spec: https://github.com/queelius/longecho",
+    ]
+    return "\n".join(lines)
 
 
 @app.command()
 def spec():
     """Print the longecho specification summary."""
-    console.print(SPEC_TEXT.rstrip())
+    console.print(_format_spec())
 
 
 @app.command()
@@ -295,15 +305,7 @@ def formats():
     console.print("[bold]longecho Durable Formats[/bold]")
     console.print()
 
-    categories = {
-        "Structured data": [".db", ".sqlite", ".sqlite3", ".json", ".jsonl"],
-        "Documents": [".md", ".markdown", ".txt", ".text", ".rst", ".html", ".htm"],
-        "Archives": [".zip"],
-        "Images": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
-        "Tabular / data": [".csv", ".tsv", ".xml", ".yaml", ".yml"],
-    }
-
-    for category, extensions in categories.items():
+    for category, extensions in DURABLE_FORMAT_CATEGORIES.items():
         console.print(f"[cyan]{category}:[/cyan]")
         console.print(f"  {', '.join(extensions)}")
         console.print()
