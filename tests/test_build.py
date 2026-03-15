@@ -324,6 +324,55 @@ class TestBuildWithSources:
         assert "_searchText" in index_content
 
 
+class TestSiteLink:
+    """Tests for linking to source-level interactive sites."""
+
+    def test_source_with_site_has_site_url(self, temp_dir):
+        """When a source has site/index.html, the SFA JSON should include site_url."""
+        (temp_dir / "README.md").write_text(
+            "---\nname: Root\ncontents:\n  - path: data-source/\n---\n# Root\n\nRoot."
+        )
+        (temp_dir / "data.json").write_text("{}")
+
+        source_dir = temp_dir / "data-source"
+        source_dir.mkdir()
+        (source_dir / "README.md").write_text("# Data Source\n\nHas its own viewer.")
+        (source_dir / "data.db").touch()
+        site_dir = source_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "README.md").write_text("---\ngenerator: ctk\n---\nViewer.")
+        (site_dir / "index.html").write_text("<html><body>Viewer</body></html>")
+
+        result = build_site(temp_dir)
+        assert result.success is True
+
+        index_content = (result.output_path / "index.html").read_text()
+        assert "site_url" in index_content
+        assert "Open interactive viewer" in index_content
+
+    def test_source_without_site_has_null_site_url(self, temp_dir):
+        """When a source has no site/, site_url should be null."""
+        import re
+        (temp_dir / "README.md").write_text(
+            "---\nname: Root\ncontents:\n  - path: plain/\n---\n# Root\n\nRoot."
+        )
+        (temp_dir / "data.json").write_text("{}")
+
+        plain_dir = temp_dir / "plain"
+        plain_dir.mkdir()
+        (plain_dir / "README.md").write_text("# Plain\n\nNo viewer.")
+        (plain_dir / "data.db").touch()
+
+        result = build_site(temp_dir)
+        assert result.success is True
+
+        index_content = (result.output_path / "index.html").read_text()
+        match = re.search(r'var DATA = (.+?);\n', index_content)
+        assert match is not None
+        data = json.loads(match.group(1))
+        assert data[0]["site_url"] is None
+
+
 @pytest.fixture
 def nested_archive(temp_dir):
     """Create a 3-level nested archive: root > conversations > chatgpt."""

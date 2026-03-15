@@ -104,6 +104,18 @@
         .metadata-label { font-weight: 500; width: 120px; flex-shrink: 0; }
         .metadata-value { color: var(--muted); }
 
+        .site-link {
+            display: inline-block;
+            padding: 0.6rem 1.2rem;
+            background: var(--link);
+            color: var(--bg);
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+        }
+        .site-link:hover { opacity: 0.85; }
+
         .children-section { margin-top: 2rem; }
         .children-section h3 { margin-bottom: 0.75rem; }
 
@@ -369,6 +381,15 @@
                 }
 
                 detailEl.appendChild(metaBox);
+            }
+
+            // Link to source's own interactive site
+            if (source.site_url) {
+                var siteLink = document.createElement('a');
+                siteLink.href = source.site_url;
+                siteLink.className = 'site-link';
+                siteLink.textContent = 'Open interactive viewer \u2192';
+                detailEl.appendChild(siteLink);
             }
 
             // README content (pre-sanitized server-side by _sanitize_html)

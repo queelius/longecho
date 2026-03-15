@@ -145,6 +145,15 @@ def _source_to_json(source: EchoSource, output_path: Path) -> dict:
     child_sources = discover_sub_sources(source)
     children = [_source_to_json(c, output_path) for c in child_sources]
 
+    # Compute relative path to source's site/index.html if it exists
+    site_url = None
+    if source.has_site and source.site_path:
+        try:
+            rel = source.site_path / "index.html"
+            site_url = str(rel.relative_to(output_path.parent))
+        except ValueError:
+            site_url = (source.site_path / "index.html").as_uri()
+
     return {
         "name": source.name,
         "description": source.description,
@@ -152,6 +161,7 @@ def _source_to_json(source: EchoSource, output_path: Path) -> dict:
         "frontmatter": frontmatter,
         "readme_html": readme_html,
         "data_files": _get_data_files(source, output_path),
+        "site_url": site_url,
         "children": children,
     }
 
