@@ -222,7 +222,7 @@ Open index.html in any browser to explore.
 ## Installation
 
 ```bash
-pip install -e ".[dev]"   # from source (not yet on PyPI)
+pip install longecho
 ```
 
 ## Commands

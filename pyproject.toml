@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 authors = [
-    { name = "Alex Towell" }
+    { name = "Alex Towell", email = "lex@metafunctor.com" }
 ]
 keywords = ["longecho", "archiving", "durability", "validator", "static-site"]
 classifiers = [
@@ -41,6 +41,11 @@ dev = [
     "ruff>=0.4.0",
     "types-Markdown>=3.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/queelius/longecho"
+Repository = "https://github.com/queelius/longecho"
+Issues = "https://github.com/queelius/longecho/issues"
 
 [project.scripts]
 longecho = "longecho.cli:app"
