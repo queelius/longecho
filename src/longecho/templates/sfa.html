@@ -203,22 +203,22 @@
 
     <script>
     (function() {
-        var DATA = {{ sources_data|tojson }};
+        var ROOT = {{ root_data|tojson }};
 
         var listEl = document.getElementById('source-list');
         var detailEl = document.getElementById('source-detail');
         var searchEl = document.getElementById('search');
-        var searchContainer = document.getElementById('search-container');
         var breadcrumbEl = document.getElementById('breadcrumb');
         var titleEl = document.getElementById('page-title');
         var descEl = document.getElementById('page-desc');
         var resultCountEl = document.getElementById('result-count');
 
-        var rootName = {{ name|tojson }};
-        var rootDesc = {{ description|tojson }};
-
-        // Navigation stack: array of { name, sources } for breadcrumb
+        // Navigation stack: array of source objects for breadcrumb.
+        // Empty = root (home view).
         var navStack = [];
+
+        // Track the currently displayed source so search can return to it.
+        var currentSource = ROOT;
 
         // Extract plain text from HTML for full-text search
         function htmlToText(html) {
@@ -245,9 +245,10 @@
                 }
             }
         }
-        buildSearchIndex(DATA);
+        buildSearchIndex([ROOT]);
 
-        // Flatten all sources (including nested) for global search
+        // Flatten descendants (excluding root) for global search.
+        // The root is always "here" in the navigation.
         function flattenSources(sources) {
             var result = [];
             for (var i = 0; i < sources.length; i++) {
@@ -259,7 +260,7 @@
             return result;
         }
 
-        var ALL_SOURCES = flattenSources(DATA);
+        var ALL_SOURCES = flattenSources(ROOT.children || []);
 
         // Plain text search: case-insensitive substring match against search index
         function matchesQuery(source, text) {
@@ -308,31 +309,25 @@
             return card;
         }
 
-        function renderList(sources, filter) {
+        // Render a flat list of search results (used only when searching).
+        function renderSearchResults(query) {
             listEl.textContent = '';
-            var text = (filter || '').trim();
-            var isSearching = text.length > 0;
-            var searchPool = isSearching ? ALL_SOURCES : sources;
             var count = 0;
 
-            for (var i = 0; i < searchPool.length; i++) {
-                if (isSearching && !matchesQuery(searchPool[i], text)) continue;
+            for (var i = 0; i < ALL_SOURCES.length; i++) {
+                if (!matchesQuery(ALL_SOURCES[i], query)) continue;
                 count++;
-                var card = createCard(searchPool[i], i, isSearching ? 'flat' : 'idx');
+                var card = createCard(ALL_SOURCES[i], i, 'flat');
                 listEl.appendChild(card);
             }
 
-            if (isSearching) {
-                resultCountEl.textContent = count + ' of ' + ALL_SOURCES.length + ' source(s)';
-            } else {
-                resultCountEl.textContent = sources.length + ' source(s)';
-            }
+            resultCountEl.textContent = count + ' of ' + ALL_SOURCES.length + ' source(s)';
 
             if (count === 0) {
                 var empty = document.createElement('div');
                 empty.className = 'empty-state';
                 var p = document.createElement('p');
-                p.textContent = isSearching ? 'No sources match your search.' : 'No sources found.';
+                p.textContent = 'No sources match your search.';
                 empty.appendChild(p);
                 listEl.appendChild(empty);
             }
@@ -451,9 +446,14 @@
         function renderBreadcrumb() {
             breadcrumbEl.textContent = '';
 
-            // Root link
+            if (navStack.length === 0) {
+                breadcrumbEl.hidden = true;
+                return;
+            }
+
+            // Root link (back to home)
             var rootLink = document.createElement('a');
-            rootLink.textContent = rootName;
+            rootLink.textContent = ROOT.name;
             rootLink.onclick = function() { navigateToRoot(); };
             breadcrumbEl.appendChild(rootLink);
 
@@ -472,60 +472,65 @@
                 }
             }
 
-            breadcrumbEl.hidden = navStack.length === 0;
+            breadcrumbEl.hidden = false;
+        }
+
+        // Show a source's detail view. The home view is the detail view of
+        // ROOT, every view in the SFA goes through this function.
+        function showDetailView(source) {
+            currentSource = source;
+            titleEl.textContent = source.name;
+            descEl.textContent = source.description;
+            resultCountEl.textContent = '';
+            listEl.hidden = true;
+            detailEl.hidden = false;
+            renderDetail(source);
         }
 
         function navigateToRoot() {
             navStack = [];
-            titleEl.textContent = rootName;
-            descEl.textContent = rootDesc;
-            breadcrumbEl.hidden = true;
-            listEl.hidden = false;
-            detailEl.hidden = true;
-            searchContainer.hidden = false;
             searchEl.value = '';
-            renderList(DATA, '');
+            renderBreadcrumb();
+            showDetailView(ROOT);
         }
 
         function navigateTo(source) {
             navStack.push(source);
-            titleEl.textContent = source.name;
-            descEl.textContent = source.description;
-            listEl.hidden = true;
-            detailEl.hidden = false;
-            searchContainer.hidden = true;
+            searchEl.value = '';
             renderBreadcrumb();
-            renderDetail(source);
+            showDetailView(source);
         }
 
         function navigateBack(idx) {
-            // Pop stack back to idx (inclusive — we want to view that source)
+            // Pop stack back to idx (inclusive) and show that source.
             navStack = navStack.slice(0, idx + 1);
-            var source = navStack[navStack.length - 1];
-            titleEl.textContent = source.name;
-            descEl.textContent = source.description;
-            listEl.hidden = true;
-            detailEl.hidden = false;
-            searchContainer.hidden = true;
+            searchEl.value = '';
             renderBreadcrumb();
-            renderDetail(source);
+            showDetailView(navStack[navStack.length - 1]);
         }
 
-        // Handle clicks on the top-level source list
+        // Handle clicks on search result cards in listEl.
+        // Child cards in the detail view have their own handler (set up
+        // per-render inside renderDetail).
         listEl.addEventListener('click', function(e) {
             var card = e.target.closest('.source-card');
             if (!card) return;
-
-            if (card.dataset.idx !== undefined) {
-                navigateTo(DATA[parseInt(card.dataset.idx, 10)]);
-            } else if (card.dataset.flat !== undefined) {
-                // Global search result — navigate to the source from ALL_SOURCES
+            if (card.dataset.flat !== undefined) {
                 navigateTo(ALL_SOURCES[parseInt(card.dataset.flat, 10)]);
             }
         });
 
         function onSearchInput() {
-            renderList(DATA, searchEl.value);
+            var query = searchEl.value.trim();
+            if (query) {
+                // Show flat search results over all descendants.
+                listEl.hidden = false;
+                detailEl.hidden = true;
+                renderSearchResults(query);
+            } else {
+                // Empty query: return to the current detail view.
+                showDetailView(currentSource);
+            }
         }
 
         searchEl.addEventListener('input', onSearchInput);

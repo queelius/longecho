@@ -369,10 +369,11 @@ class TestSiteLink:
         assert result.success is True
 
         index_content = (result.output_path / "index.html").read_text()
-        match = re.search(r'var DATA = (.+?);\n', index_content)
+        match = re.search(r'var ROOT = (.+?);\n', index_content)
         assert match is not None
-        data = json.loads(match.group(1))
-        assert data[0]["site_url"] is None
+        root_data = json.loads(match.group(1))
+        # Root's child "plain" has no site
+        assert root_data["children"][0]["site_url"] is None
 
 
 @pytest.fixture
@@ -430,18 +431,19 @@ class TestRecursiveBuild:
         assert result.success is True
 
         index_content = (result.output_path / "index.html").read_text()
-        match = re.search(r'var DATA = (.+?);\n', index_content)
+        match = re.search(r'var ROOT = (.+?);\n', index_content)
         assert match is not None
-        data = json.loads(match.group(1))
+        root_data = json.loads(match.group(1))
 
-        # Root has 1 child (conversations)
-        assert len(data) == 1
-        assert data[0]["name"] == "Conversations"
+        # Root is a single source object with its own children
+        assert root_data["name"] == "Root"
+        assert len(root_data["children"]) == 1
+        assert root_data["children"][0]["name"] == "Conversations"
         # Conversations has 1 child (chatgpt)
-        assert len(data[0]["children"]) == 1
-        assert data[0]["children"][0]["name"] == "ChatGPT"
+        assert len(root_data["children"][0]["children"]) == 1
+        assert root_data["children"][0]["children"][0]["name"] == "ChatGPT"
         # ChatGPT has no children
-        assert len(data[0]["children"][0]["children"]) == 0
+        assert len(root_data["children"][0]["children"][0]["children"]) == 0
 
 
 class TestMakeJsonSafe:
@@ -583,6 +585,75 @@ class TestIsForeignSite:
         is_foreign, gen = _is_foreign_site(temp_dir)
         assert is_foreign is True
         assert gen == "ctk v2.1"
+
+
+class TestRootSourceRendering:
+    """Tests for the unified home/detail view (root as a full source)."""
+
+    def test_root_readme_inlined(self, temp_dir):
+        """Root source's README content should appear in the SFA."""
+        (temp_dir / "README.md").write_text(
+            "---\nname: Root Archive\n---\n"
+            "# Root Archive\n\nThis description has a UNIQUE_ROOT_TOKEN."
+        )
+        (temp_dir / "data.json").write_text("{}")
+
+        result = build_site(temp_dir)
+        assert result.success is True
+        index_content = (result.output_path / "index.html").read_text()
+        assert "UNIQUE_ROOT_TOKEN" in index_content
+
+    def test_root_data_files_rendered(self, temp_dir):
+        """Root source's direct data files should appear in the SFA JSON."""
+        import re
+        (temp_dir / "README.md").write_text("# Root\n\nRoot archive.")
+        (temp_dir / "root_data.jsonl").write_text("")
+        (temp_dir / "root_config.json").write_text("{}")
+
+        result = build_site(temp_dir)
+        assert result.success is True
+
+        index_content = (result.output_path / "index.html").read_text()
+        match = re.search(r'var ROOT = (.+?);\n', index_content)
+        assert match is not None
+        root_data = json.loads(match.group(1))
+
+        file_names = [f["name"] for f in root_data["data_files"]]
+        assert "root_data.jsonl" in file_names
+        assert "root_config.json" in file_names
+
+    def test_root_site_url_is_self_skipped(self, temp_dir):
+        """Root's site_url should be None (don't link to self)."""
+        import re
+        (temp_dir / "README.md").write_text("# Root\n\nRoot archive.")
+        (temp_dir / "data.json").write_text("{}")
+
+        # First build creates a site/
+        result1 = build_site(temp_dir)
+        assert result1.success is True
+
+        # Second build should see the existing site but skip self-reference
+        result2 = build_site(temp_dir)
+        assert result2.success is True
+
+        index_content = (result2.output_path / "index.html").read_text()
+        match = re.search(r'var ROOT = (.+?);\n', index_content)
+        assert match is not None
+        root_data = json.loads(match.group(1))
+        assert root_data["site_url"] is None
+
+    def test_root_with_no_children_still_renders(self, temp_dir):
+        """An archive with only direct files (no sub-sources) should render."""
+        (temp_dir / "README.md").write_text(
+            "# Single-Level Archive\n\nNo sub-sources, just data."
+        )
+        (temp_dir / "data.json").write_text('{"hello": "world"}')
+
+        result = build_site(temp_dir)
+        assert result.success is True
+        assert result.sources_count == 0  # no children
+        index_content = (result.output_path / "index.html").read_text()
+        assert "Single-Level Archive" in index_content
 
 
 class TestForeignSiteProtection:

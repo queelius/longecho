@@ -206,14 +206,21 @@ def _source_to_json(source: EchoSource, output_path: Path) -> dict:
     child_sources = discover_sub_sources(source)
     children = [_source_to_json(c, output_path) for c in child_sources]
 
-    # Compute relative path to source's site/index.html if it exists
+    # Compute relative path to source's site/index.html if it exists.
+    # Skip self-references: the root source's site IS the output we're
+    # generating right now, so linking to it would point at the current page.
     site_url = None
     if source.has_site and source.site_path:
         try:
-            rel = source.site_path / "index.html"
-            site_url = str(rel.relative_to(output_path.parent))
-        except ValueError:
-            site_url = (source.site_path / "index.html").as_uri()
+            is_self_ref = source.site_path.resolve() == output_path.resolve()
+        except OSError:
+            is_self_ref = False
+        if not is_self_ref:
+            try:
+                rel = source.site_path / "index.html"
+                site_url = str(rel.relative_to(output_path.parent))
+            except ValueError:
+                site_url = (source.site_path / "index.html").as_uri()
 
     return {
         "name": source.name,
@@ -290,7 +297,9 @@ def build_site(
         )
 
     root_source = result.source
-    sources = discover_sub_sources(root_source)
+    # Pre-compute top-level children for the site README (cheap, sourced
+    # from check_compliance cache; _source_to_json will walk again).
+    top_level_children = discover_sub_sources(root_source)
 
     output_path = Path(output).resolve() if output else path / "site"
 
@@ -309,24 +318,28 @@ def build_site(
 
     output_path.mkdir(parents=True, exist_ok=True)
 
-    sources_data = [_source_to_json(s, output_path) for s in sources]
+    # Render the root source itself as a full JSON object (README, data
+    # files, metadata, and recursively nested children). This unifies the
+    # home view with the detail view: every view in the SFA is the detail
+    # view of some source, and the home view is the root's detail view.
+    root_data = _source_to_json(root_source, output_path)
 
     env = get_jinja_env()
     template = env.get_template("sfa.html")
     html = template.render(
         name=root_source.name,
         description=root_source.description,
-        sources_data=sources_data,
+        root_data=root_data,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
 
     index_path = output_path / "index.html"
     index_path.write_text(html, encoding="utf-8")
 
-    _generate_site_readme(root_source.name, sources, output_path)
+    _generate_site_readme(root_source.name, top_level_children, output_path)
 
     return BuildResult(
         success=True,
         output_path=output_path,
-        sources_count=_count_sources(sources_data),
+        sources_count=_count_sources(root_data.get("children", [])),
     )
