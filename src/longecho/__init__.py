@@ -1,6 +1,6 @@
 """longecho -- compliance validator, discovery, and site builder for durable personal archives."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .build import BuildResult, build_site
 from .checker import (

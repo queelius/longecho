@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-09
+
 ### Added
 - Foreign site overwrite protection: `longecho build` refuses to overwrite a
   `site/` whose `README.md` `generator` field is not longecho's own. New
