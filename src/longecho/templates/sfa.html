@@ -288,8 +288,8 @@
             card.appendChild(descDiv);
 
             var metaParts = [];
-            if (source.formats && source.formats.length) {
-                metaParts.push(source.formats.join(', '));
+            if (source.durable_formats && source.durable_formats.length) {
+                metaParts.push(source.durable_formats.join(', '));
             }
             var fm = source.frontmatter || {};
             if (fm.author) metaParts.push(fm.author);
@@ -342,11 +342,11 @@
                 return k !== 'name' && k !== 'description' && k !== 'contents';
             });
 
-            if (metaKeys.length || (source.formats && source.formats.length)) {
+            if (metaKeys.length || (source.durable_formats && source.durable_formats.length)) {
                 var metaBox = document.createElement('div');
                 metaBox.className = 'metadata';
 
-                if (source.formats && source.formats.length) {
+                if (source.durable_formats && source.durable_formats.length) {
                     var row = document.createElement('div');
                     row.className = 'metadata-row';
                     var label = document.createElement('span');
@@ -354,7 +354,7 @@
                     label.textContent = 'Formats';
                     var val = document.createElement('span');
                     val.className = 'metadata-value';
-                    val.textContent = source.formats.join(', ');
+                    val.textContent = source.durable_formats.join(', ');
                     row.appendChild(label);
                     row.appendChild(val);
                     metaBox.appendChild(row);

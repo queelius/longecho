@@ -35,10 +35,9 @@ MAX_README_SUMMARY_LENGTH: int = 500
 
 @dataclass
 class Readme:
-    """A README parsed into its constituent parts."""
+    """A README parsed into its structured parts."""
 
     frontmatter: Optional[dict]
-    body: str
     title: Optional[str]
     summary: Optional[str]
 
@@ -103,7 +102,7 @@ def parse_readme(readme_path: Path) -> Optional[Readme]:
         summary_lines.append(stripped)
 
     summary = " ".join(summary_lines)[:MAX_README_SUMMARY_LENGTH] if summary_lines else None
-    return Readme(frontmatter=frontmatter, body=body, title=title, summary=summary)
+    return Readme(frontmatter=frontmatter, title=title, summary=summary)
 
 
 @dataclass

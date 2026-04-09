@@ -64,6 +64,7 @@ Build pipeline: `check_compliance` → `discover_sub_sources` (recursive) → `_
 - **Data files are source-scoped:** `_get_data_files` walks recursively but stops at nested sources. Each source's SFA detail view lists only the files it directly owns, not files belonging to sub-sources.
 - **Search is plain text:** no special query syntax. Power users use `--json | jq` for structured queries.
 - **YAML `datetime.date` pitfall:** `yaml.safe_load` parses bare dates into `datetime.date` objects. `make_json_safe()` in build.py converts these for JSON serialization. Both build and CLI JSON output paths need this.
+- **`site/` asymmetry between build and query:** `discover_sub_sources` (build) skips `site/` directories because they're the viewer, not the content. `discover_sources` (query) does NOT skip them, because a tool-generated `site/` is still a legitimate longecho-compliant source that should be discoverable. This is intentional: build walks the archive content tree, query walks the whole filesystem.
 
 ## Ecosystem
 

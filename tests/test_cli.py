@@ -174,3 +174,20 @@ class TestVersionFlag:
 
         assert result.exit_code == 0
         assert "longecho version" in result.stdout
+
+
+class TestModuleEntryPoint:
+    """Smoke test for `python -m longecho` (exercises __main__.py)."""
+
+    def test_python_m_longecho(self):
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "longecho", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0
+        assert "longecho version" in result.stdout

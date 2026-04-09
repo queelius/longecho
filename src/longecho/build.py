@@ -225,7 +225,7 @@ def _source_to_json(source: EchoSource, output_path: Path) -> dict:
     return {
         "name": source.name,
         "description": source.description,
-        "formats": source.durable_formats,
+        "durable_formats": source.durable_formats,
         "frontmatter": frontmatter,
         "readme_html": readme_html,
         "data_files": _get_data_files(source, output_path),
