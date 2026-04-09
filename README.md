@@ -132,7 +132,7 @@ Every directory is self-describing. If the archive gets fragmented, each piece s
 
 ### The `contents` Field
 
-The `contents` field in frontmatter lists what's in a directory:
+The `contents` field in frontmatter lists what's in a directory. It serves two purposes: it tells humans and LLMs what's here, and it controls how `longecho build` curates sub-sources.
 
 ```yaml
 contents:
@@ -144,11 +144,12 @@ contents:
 
 Entries always use the explicit `path:` form. Additional fields like `description` are optional and informational.
 
-When `contents` is present, the longecho tool uses it for:
-- **Curation** — only listed entries are included in a build
-- **Ordering** — entries appear in the order listed
+When `contents` is present, `longecho build` uses it as follows:
 
-When `contents` is absent, the tool auto-discovers all longecho-compliant subdirectories in alphabetical order.
+- **Directory entries** (`conversations/`, `bookmarks/`) control **curation** and **ordering** of sub-sources. Only listed directories become navigable sub-sources in the build output, and they appear in the order listed.
+- **File entries** (`ctk.db`) are **informational metadata**: they describe what's in the directory for humans and LLMs who read the README, but do not affect build structure. They are preserved in the frontmatter (where any reader can see them), but longecho does not surface them separately in the generated site.
+
+When `contents` is absent, the tool auto-discovers all longecho-compliant subdirectories in alphabetical order, and all durable data files in the directory appear in the site's "Data Files" list.
 
 Each sub-source is always self-describing. The parent's `contents` field controls which children appear and in what order, but never overrides a child's own name or description.
 
@@ -249,7 +250,7 @@ longecho formats                       # List recognized durable formats
 
 ## Ecosystem
 
-Tools that produce longecho-compliant data. Each is self-contained — works without longecho, documented in its own repo. All share the `longecho-ecosystem` GitHub topic.
+Tools that produce longecho-compliant data. Each is self-contained, works without longecho, and is documented in its own repo. Tagged members share the `longecho-ecosystem` GitHub topic.
 
 | Tool | What it manages |
 |------|-----------------|
@@ -258,7 +259,9 @@ Tools that produce longecho-compliant data. Each is self-contained — works wit
 | [repoindex](https://github.com/queelius/repoindex) | Git repo metadata |
 | [jot](https://github.com/queelius/jot) | Plaintext journal/notes |
 | [pagevault](https://github.com/queelius/pagevault) | Password-protected static content |
-| arkiv | Universal personal data format (JSONL→SQL) |
+| arkiv | Universal personal data format (JSONL to SQL) |
+
+Personal toolkits like `ctk` (conversations), `btk` (bookmarks), `ebk` (ebooks), and `mtk` (mail) also produce longecho-compliant data. They appear as illustrative examples throughout this README. The `site/` convention works with any tool that writes durable formats and a self-describing README.
 
 Markdown-based sources (Hugo, Jekyll, Obsidian, etc.) are inherently longecho-compliant.
 

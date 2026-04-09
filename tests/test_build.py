@@ -7,6 +7,8 @@ import pytest
 
 from longecho.build import (
     BuildResult,
+    _get_data_files,
+    _is_foreign_site,
     build_site,
     discover_sub_sources,
     make_json_safe,
@@ -469,3 +471,165 @@ class TestMakeJsonSafe:
     def test_passes_through_normal_types(self):
         data = {"name": "test", "count": 42, "flag": True, "items": [1, "two"]}
         assert make_json_safe(data) == data
+
+
+class TestRecursiveDataFiles:
+    """Tests for _get_data_files walking nested directories."""
+
+    def _make_source(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Test\n\nTest source.")
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        return result.source
+
+    def test_finds_top_level_files(self, temp_dir):
+        (temp_dir / "data.json").write_text("{}")
+        source = self._make_source(temp_dir)
+
+        files = _get_data_files(source, temp_dir / "site")
+        names = [f["name"] for f in files]
+        assert "data.json" in names
+
+    def test_finds_nested_files(self, temp_dir):
+        """Files in subdirectories should be found (within max scan depth)."""
+        (temp_dir / "data.json").write_text("{}")
+        data_dir = temp_dir / "data"
+        data_dir.mkdir()
+        (data_dir / "records.jsonl").write_text("")
+        source = self._make_source(temp_dir)
+
+        files = _get_data_files(source, temp_dir / "site")
+        names = [f["name"] for f in files]
+        assert "data.json" in names
+        # Nested file uses relative path as display name
+        assert "data/records.jsonl" in names
+
+    def test_stops_at_nested_sources(self, temp_dir):
+        """Don't descend into directories that are themselves compliant sources."""
+        (temp_dir / "top.json").write_text("{}")
+
+        # A nested source — has its own README
+        sub = temp_dir / "subsource"
+        sub.mkdir()
+        (sub / "README.md").write_text("# Sub\n\nA sub-source.")
+        (sub / "sub.jsonl").write_text("")
+
+        source = self._make_source(temp_dir)
+        files = _get_data_files(source, temp_dir / "site")
+        names = [f["name"] for f in files]
+        assert "top.json" in names
+        # sub.jsonl belongs to the sub-source, not the parent
+        assert not any("sub.jsonl" in n for n in names)
+
+    def test_skips_site_directory(self, temp_dir):
+        """site/ subdirectory should never appear in data files (it's a viewer)."""
+        (temp_dir / "data.json").write_text("{}")
+        site_dir = temp_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "README.md").write_text("---\ngenerator: ctk\n---\n")
+        (site_dir / "index.html").write_text("<html>viewer</html>")
+
+        source = self._make_source(temp_dir)
+        files = _get_data_files(source, temp_dir / "site_output")
+        names = [f["name"] for f in files]
+        assert "data.json" in names
+        assert not any("index.html" in n for n in names)
+
+    def test_excludes_readme_and_excluded_files(self, temp_dir):
+        """README.md, CLAUDE.md, etc. should not be listed as data files."""
+        (temp_dir / "CLAUDE.md").write_text("# Claude notes")
+        (temp_dir / "data.json").write_text("{}")
+        source = self._make_source(temp_dir)
+
+        files = _get_data_files(source, temp_dir / "site")
+        names = [f["name"] for f in files]
+        assert "data.json" in names
+        assert "README.md" not in names
+        assert "CLAUDE.md" not in names
+
+
+class TestIsForeignSite:
+    """Tests for _is_foreign_site detection."""
+
+    def test_nonexistent_readme(self, temp_dir):
+        is_foreign, gen = _is_foreign_site(temp_dir)
+        assert is_foreign is False
+        assert gen == ""
+
+    def test_readme_without_frontmatter(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Some site\n\nNo frontmatter.")
+        is_foreign, gen = _is_foreign_site(temp_dir)
+        assert is_foreign is False
+
+    def test_readme_without_generator(self, temp_dir):
+        (temp_dir / "README.md").write_text(
+            "---\nname: Some Site\n---\n# Some site\n\nNo generator field."
+        )
+        is_foreign, gen = _is_foreign_site(temp_dir)
+        assert is_foreign is False
+
+    def test_longecho_generator(self, temp_dir):
+        (temp_dir / "README.md").write_text(
+            "---\ngenerator: longecho build v0.3.0\n---\n# Our site"
+        )
+        is_foreign, gen = _is_foreign_site(temp_dir)
+        assert is_foreign is False
+        assert "longecho build" in gen
+
+    def test_foreign_generator(self, temp_dir):
+        (temp_dir / "README.md").write_text(
+            "---\ngenerator: ctk v2.1\n---\n# CTK-generated site"
+        )
+        is_foreign, gen = _is_foreign_site(temp_dir)
+        assert is_foreign is True
+        assert gen == "ctk v2.1"
+
+
+class TestForeignSiteProtection:
+    """Tests for build_site refusing to overwrite foreign-generated sites."""
+
+    def test_refuses_to_overwrite_foreign_site(self, echo_compliant_dir):
+        """Build should fail cleanly when output contains a foreign site."""
+        site_dir = echo_compliant_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "README.md").write_text(
+            "---\nname: CTK Viewer\ngenerator: ctk v2.1\n---\n# CTK"
+        )
+        (site_dir / "index.html").write_text("<html>CTK VIEWER</html>")
+
+        result = build_site(echo_compliant_dir)
+        assert result.success is False
+        assert "ctk" in result.error.lower()
+
+        # Existing files must not be touched
+        assert "CTK VIEWER" in (site_dir / "index.html").read_text()
+
+    def test_force_overwrites_foreign_site(self, echo_compliant_dir):
+        """--force bypasses the foreign-site check."""
+        site_dir = echo_compliant_dir / "site"
+        site_dir.mkdir()
+        (site_dir / "README.md").write_text(
+            "---\ngenerator: ctk v2.1\n---\n# CTK"
+        )
+        (site_dir / "index.html").write_text("<html>CTK VIEWER</html>")
+
+        result = build_site(echo_compliant_dir, force=True)
+        assert result.success is True
+        # Original content overwritten
+        assert "CTK VIEWER" not in (site_dir / "index.html").read_text()
+
+    def test_overwrites_own_previous_site(self, echo_compliant_dir):
+        """Sites generated by longecho build should be freely overwritable."""
+        result1 = build_site(echo_compliant_dir)
+        assert result1.success is True
+
+        # Second build should succeed without --force
+        result2 = build_site(echo_compliant_dir)
+        assert result2.success is True
+
+    def test_empty_output_directory_ok(self, echo_compliant_dir, temp_dir):
+        """Building to an empty or non-existent directory should work."""
+        empty_out = temp_dir / "fresh_output"
+        result = build_site(echo_compliant_dir, output=empty_out)
+        assert result.success is True
+        assert (empty_out / "index.html").exists()
