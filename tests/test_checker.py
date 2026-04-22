@@ -130,6 +130,16 @@ class TestIsDurableFormat:
         assert is_durable_format(".html")
         assert is_durable_format(".htm")
 
+    def test_archives_are_durable(self):
+        """zip, gz (covers .tar.gz), and tgz all clear the durability bar.
+
+        These compression formats have been part of every mainstream OS
+        since the 1990s and decode without special tooling in 2026.
+        """
+        assert is_durable_format(".zip")
+        assert is_durable_format(".gz")
+        assert is_durable_format(".tgz")
+
     def test_handles_no_dot(self):
         assert is_durable_format("json")
         assert is_durable_format("md")

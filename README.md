@@ -47,7 +47,7 @@ That's it. No special files, no schema, no version numbers.
 |----------|---------|
 | Structured data | `.db`, `.sqlite`, `.sqlite3`, `.json`, `.jsonl` |
 | Documents | `.md`, `.markdown`, `.txt`, `.text`, `.rst`, `.html`, `.htm` |
-| Archives | `.zip` |
+| Archives | `.zip`, `.gz` (covers `.tar.gz`), `.tgz` |
 | Images | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif` |
 | Tabular / data | `.csv`, `.tsv`, `.xml`, `.yaml`, `.yml` |
 

@@ -11,7 +11,11 @@ import yaml
 DURABLE_FORMAT_CATEGORIES: dict[str, list[str]] = {
     "Structured data": [".db", ".sqlite", ".sqlite3", ".json", ".jsonl"],
     "Documents": [".md", ".markdown", ".txt", ".text", ".rst", ".html", ".htm"],
-    "Archives": [".zip"],
+    # .zip is the original archive format. .gz covers gzip (file.json.gz,
+    # file.tar.gz, etc.); .tgz is the compact tar-gzip spelling. All three
+    # have been decoded by every OS for 30+ years, so they clear the
+    # "will I still be able to open this" bar the rest of the list respects.
+    "Archives": [".zip", ".gz", ".tgz"],
     "Images": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
     "Tabular / data": [".csv", ".tsv", ".xml", ".yaml", ".yml"],
 }
