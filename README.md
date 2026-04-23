@@ -47,9 +47,11 @@ That's it. No special files, no schema, no version numbers.
 |----------|---------|
 | Structured data | `.db`, `.sqlite`, `.sqlite3`, `.json`, `.jsonl` |
 | Documents | `.md`, `.markdown`, `.txt`, `.text`, `.rst`, `.html`, `.htm` |
-| Archives | `.zip`, `.gz` (covers `.tar.gz`), `.tgz` |
+| Archives | `.zip`, `.gz`, `.tgz` |
 | Images | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif` |
 | Tabular / data | `.csv`, `.tsv`, `.xml`, `.yaml`, `.yml` |
+
+Gzipped files are recognized by their terminal `.gz` suffix, so `.jsonl.gz`, `.csv.gz`, `.tar.gz`, and similar compounds all qualify. The `.tgz` form is the compact tar-gzip spelling.
 
 The principle: formats that can be read without proprietary software, have multiple implementations, and are widely documented.
 

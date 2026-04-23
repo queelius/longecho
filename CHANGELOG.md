@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `.gz` and `.tgz` accepted as durable archive formats. Gzip has shipped with
+  every mainstream OS since 1992 and decodes without special tooling.
+  Compound extensions like `.jsonl.gz`, `.csv.gz`, and `.tar.gz` qualify via
+  their terminal `.gz` suffix.
+- Compliance smoke tests for `.jsonl.gz` and `.tar.gz` pin the behavior and
+  document the contract (there is no separate `.tar.gz` entry; the `.gz`
+  suffix is what earns durability).
+
+### Changed
+- README durable-formats section clarifies that gzipped files qualify via
+  terminal `.gz`, covering `.jsonl.gz`, `.csv.gz`, `.tar.gz`, etc.
+
 ## [0.4.0] - 2026-04-09
 
 ### Added

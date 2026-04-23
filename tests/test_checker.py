@@ -183,6 +183,42 @@ class TestCheckCompliance:
         assert result.source is None
         assert "not exist" in result.reason.lower()
 
+    def test_compliance_passes_on_gzipped_structured_data(self, temp_dir):
+        """A directory containing .jsonl.gz passes compliance via .gz suffix.
+
+        Pins the pragmatic behavior: gzipped JSONL (a common export format
+        from conversation tools, log pipelines, etc.) is recognized as
+        durable. Path.suffix returns only the outer '.gz', so the jsonl
+        part is not itself registered, but .gz is durable so the directory
+        qualifies.
+        """
+        import gzip
+
+        (temp_dir / "README.md").write_text("# Archive\n\nGzipped exports.")
+        payload = gzip.compress(b'{"id": 1}\n{"id": 2}\n')
+        (temp_dir / "conversations.jsonl.gz").write_bytes(payload)
+
+        result = check_compliance(temp_dir)
+        assert result.compliant is True
+        assert result.source is not None
+        assert ".gz" in result.source.durable_formats
+
+    def test_compliance_passes_on_tar_gz(self, temp_dir):
+        """.tar.gz is detected via the terminal .gz suffix.
+
+        Documents the contract: there is no separate .tar.gz entry in
+        DURABLE_EXTENSIONS. The .gz suffix is what earns durability,
+        which matches how Path.suffix parses the filename.
+        """
+        import gzip
+
+        (temp_dir / "README.md").write_text("# Archive\n\nA tarball.")
+        (temp_dir / "backup.tar.gz").write_bytes(gzip.compress(b"fake tar"))
+
+        result = check_compliance(temp_dir)
+        assert result.compliant is True
+        assert ".gz" in result.source.durable_formats
+
     def test_file_path(self, temp_dir):
         test_file = temp_dir / "test.txt"
         test_file.write_text("test")
