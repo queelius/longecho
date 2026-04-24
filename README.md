@@ -53,6 +53,8 @@ That's it. No special files, no schema, no version numbers.
 
 Gzipped files are recognized by their terminal `.gz` suffix, so `.jsonl.gz`, `.csv.gz`, `.tar.gz`, and similar compounds all qualify. The `.tgz` form is the compact tar-gzip spelling.
 
+Archive formats (`.zip`, `.gz`, `.tgz`) are recognized as durable because their readers are universally available and well-documented. longecho does not traverse into archives. A packed archive is treated as an opaque durable artifact: its presence satisfies the "durable format" requirement, but its contents are not inspected, validated, or indexed by longecho. To work with what is inside, extract first and operate on the resulting directory. This matches how archives are used everywhere else in computing: they are transport containers, not working formats.
+
 The principle: formats that can be read without proprietary software, have multiple implementations, and are widely documented.
 
 ---
