@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 longecho is both a philosophy and a tool for durable personal archives. A directory is longecho-compliant if it has a README.md/README.txt + data in durable formats. The CLI validates compliance, queries archives, and builds single-file browsable sites.
 
-**Status:** Alpha.
+**Status:** Alpha. v0.4.0 on PyPI (`pip install longecho`).
 
 ## Commands
 
@@ -65,6 +65,8 @@ Build pipeline: `check_compliance` → `discover_sub_sources` (recursive) → `_
 - **Search is plain text:** no special query syntax. Power users use `--json | jq` for structured queries.
 - **YAML `datetime.date` pitfall:** `yaml.safe_load` parses bare dates into `datetime.date` objects. `make_json_safe()` in build.py converts these for JSON serialization. Both build and CLI JSON output paths need this.
 - **`site/` asymmetry between build and query:** `discover_sub_sources` (build) skips `site/` directories because they're the viewer, not the content. `discover_sources` (query) does NOT skip them, because a tool-generated `site/` is still a legitimate longecho-compliant source that should be discoverable. This is intentional: build walks the archive content tree, query walks the whole filesystem.
+- **Archives are opaque:** `.zip`, `.gz`, `.tgz` count as durable formats but longecho never reads inside them. A directory containing only an archive plus a README is compliant; the archive is treated as a transport container, not a working format. To work with archive contents, extract first.
+- **Compound extensions via terminal suffix:** `Path.suffix` returns only the last extension, so `conversations.jsonl.gz` qualifies via `.gz` (not `.jsonl.gz`). This is intentional and tested. Consequence: a source's `durable_formats` list lumps all `*.gz` files under `.gz` regardless of their underlying type.
 
 ## Ecosystem
 
