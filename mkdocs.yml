@@ -1,0 +1,48 @@
+site_name: longecho
+site_description: A philosophy and a tool for durable personal archives.
+site_url: https://queelius.github.io/longecho/
+repo_url: https://github.com/queelius/longecho
+repo_name: queelius/longecho
+copyright: Copyright &copy; Alexander Towell
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - toc.follow
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Specification: spec.md
+  - CLI reference: cli.md
+  - Ecosystem: ecosystem.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+exclude_docs: |
+  ideas/
+  superpowers/

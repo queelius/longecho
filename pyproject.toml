@@ -42,6 +42,10 @@ dev = [
     "types-Markdown>=3.0.0",
 ]
 
+docs = [
+    "mkdocs-material>=9.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/queelius/longecho"
 Repository = "https://github.com/queelius/longecho"
