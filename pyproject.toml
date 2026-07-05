@@ -48,6 +48,7 @@ docs = [
 
 [project.urls]
 Homepage = "https://github.com/queelius/longecho"
+Documentation = "https://queelius.github.io/longecho/"
 Repository = "https://github.com/queelius/longecho"
 Issues = "https://github.com/queelius/longecho/issues"
 

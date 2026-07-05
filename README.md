@@ -2,6 +2,8 @@
 
 **A philosophy and a tool for durable personal archives.**
 
+Documentation: [queelius.github.io/longecho](https://queelius.github.io/longecho/)
+
 ---
 
 ## The Philosophy

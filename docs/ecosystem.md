@@ -8,13 +8,14 @@ That is what makes longecho an orchestration layer rather than a framework. It d
 
 These repositories carry the `longecho-ecosystem` GitHub topic. Each is independent, lives in its own repository, and produces longecho-compliant exports.
 
+- [arkiv](https://github.com/queelius/arkiv): universal personal data format (JSONL in, SQL out), the data-format backbone several of the others build on.
 - [memex](https://github.com/queelius/memex): personal conversation knowledge base across providers.
 - [repoindex](https://github.com/queelius/repoindex): filesystem git catalog with project metadata.
 - [chartfold](https://github.com/queelius/chartfold): personal health data consolidated from multiple record systems into SQLite.
 - [jot](https://github.com/queelius/jot): plaintext journal, notes, and tasks.
 - [pagevault](https://github.com/queelius/pagevault): password-protected content for static sites.
 
-[arkiv](https://github.com/queelius/arkiv) (a universal personal data format: JSONL in, SQL out) is the data-format backbone several of these build on. [posthumous](https://github.com/queelius/posthumous), a federated deadman-switch with TOTP check-in, is adjacent rather than a producer: it shares the same durable, local-first, self-hosted stack.
+[posthumous](https://github.com/queelius/posthumous), a federated deadman-switch with TOTP check-in, is adjacent rather than a producer: it shares the same durable, local-first, self-hosted stack.
 
 ## Illustrative example producers
 
