@@ -80,7 +80,7 @@ Build pipeline: `check_compliance` → `discover_sub_sources` (recursive) → `_
 - **`contents` field in frontmatter:** *directory* entries control build curation and ordering. *File* entries are preserved as informational metadata (visible in frontmatter to humans and LLMs) but do not affect build structure. Without `contents`, auto-discovery is alphabetical and all durable files in the source appear in "Data Files".
 - **No parent overrides:** a source's identity always comes from its own README.
 - **`site/` is longecho-compliant:** the generated site directory has its own README plus index.html. It appears in query results.
-- **Site overwrite protection:** `longecho build` refuses to overwrite sites whose `README.md` has a `generator` field not starting with "longecho build". This protects tool-generated viewers (ctk, chartfold, etc.) from being clobbered. Pass `--force` to override.
+- **Site overwrite protection:** `longecho build` overwrites a non-empty `site/` only when its `README.md` `generator` starts with "longecho build". Another tool's stamp, a README without one, or no README at all (e.g. a memex HTML viewer) all count as foreign. This protects tool-generated viewers (ctk, chartfold, etc.) from being clobbered. Pass `--force` to override.
 - **Data files are source-scoped:** `_get_data_files` walks recursively but stops at nested sources. Each source's SFA detail view lists only the files it directly owns, not files belonging to sub-sources.
 - **Search is plain text:** no special query syntax. Power users use `--json | jq` for structured queries.
 - **YAML `datetime.date` pitfall:** `yaml.safe_load` parses bare dates into `datetime.date` objects. `make_json_safe()` in build.py converts these for JSON serialization. Both build and CLI JSON output paths need this.
@@ -90,6 +90,6 @@ Build pipeline: `check_compliance` → `discover_sub_sources` (recursive) → `_
 
 ## Ecosystem
 
-Part of the `longecho-ecosystem` (GitHub topic). Related tools: arkiv, memex, repoindex, chartfold, jot, pagevault. `posthumous` is adjacent (same local-first stack) but not tagged.
+Part of the `longecho-ecosystem` (GitHub topic). Tagged (check live with `gh search repos --owner queelius --topic longecho-ecosystem`): arkiv, chartfold, jot, llm-memex, pagevault, repoindex. The other `*-memex` archives (book, bookmark, mail, photo) export arkiv directories but are not tagged. `posthumous` is adjacent (same local-first stack) but not tagged.
 
 Unreleased work sits under `[Unreleased]` in CHANGELOG.md; on release, bump `version` in pyproject.toml and the status line above.

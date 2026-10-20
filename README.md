@@ -88,7 +88,7 @@ contents:
 Six years of AI conversations, exported using ctk.
 ```
 
-All frontmatter is optional. A README with no frontmatter is perfectly valid — the heading and first paragraph provide name and description, and the directory name is the fallback.
+All frontmatter is optional. A README with no frontmatter is perfectly valid: the heading and first paragraph provide name and description, and the directory name is the fallback.
 
 ### Fields With Special Behavior
 
@@ -104,19 +104,19 @@ Three fields change how the longecho tool behaves:
 
 Any valid YAML can go in frontmatter. The tool preserves it, displays it in generated sites, and makes it queryable. Common fields worth including:
 
-- `author` — who created this
-- `datetime` — when
-- `origin` — where the data came from
-- `generator` — what tool produced this
-- `tool` / `tool_url` — what program best understands this data
+- `author`: who created this
+- `datetime`: when
+- `origin`: where the data came from
+- `generator`: what tool produced this
+- `tool` / `tool_url`: what program best understands this data
 
-These aren't privileged — they're just commonly useful. Include whatever you think a future reader would find helpful. longecho parses what it recognizes; a human or LLM reads everything.
+These aren't privileged; they're just commonly useful. Include whatever you think a future reader would find helpful. longecho parses what it recognizes; a human or LLM reads everything.
 
 ---
 
 ## Nesting
 
-A longecho source can contain other longecho sources. The structure is recursive — each level is the same kind of object:
+A longecho source can contain other longecho sources. The structure is recursive: each level is the same kind of object:
 
 ```
 my-archive/
@@ -163,9 +163,11 @@ Each sub-source is always self-describing. The parent's `contents` field control
 
 ## The `site/` Convention
 
-A `site/` directory provides a static, browsable representation of a source. This is a convenience layer — raw data must still exist alongside it.
+A `site/` directory provides a static, browsable representation of a source. This is a convenience layer; raw data must still exist alongside it.
 
-Any tool MAY generate a `site/` for its data. `longecho build` generates one for the archive as a whole, but individual toolkits (ctk, btk, chartfold, etc.) can generate their own. The `site/` directory follows the same rules as any longecho source — self-describing via README.md.
+Any tool MAY generate a `site/` for its data. `longecho build` generates one for the archive as a whole, but individual tools (the memex archives, chartfold, and so on) can generate their own. The `site/` directory follows the same rules as any longecho source: self-describing via README.md, and its frontmatter `generator` names the tool that made it.
+
+`longecho build` overwrites a non-empty `site/` only when that `generator` starts with `longecho build`, meaning longecho made it. Any other `site/`, including a viewer with no README at all, is left alone unless you pass `--force`.
 
 ```
 my-archive/
@@ -185,13 +187,13 @@ my-archive/
 
 ### Composition
 
-The pattern is fractal: a parent SFA links to its children's sites. `longecho build` detects when a source has a `site/` and presents an "Open interactive viewer" link in the archive navigator. This means you can compose archives of archives — `longecho build` at any level produces a working SFA that connects to all the interfaces below it.
+The pattern is fractal: a parent SFA links to its children's sites. `longecho build` detects when a source has a `site/` and presents an "Open interactive viewer" link in the archive navigator. This means you can compose archives of archives: `longecho build` at any level produces a working SFA that connects to all the interfaces below it.
 
 ### Single-File Application
 
-`longecho build` generates a self-contained `site/index.html` — a single-file application with all content, CSS, and JavaScript inlined. No external dependencies, no relative links to break. Single-file is recommended for all `site/` generators (maximum durability), but not required.
+`longecho build` generates a self-contained `site/index.html`: a single-file application with all content, CSS, and JavaScript inlined, and no external dependencies. Single-file is recommended for all `site/` generators (maximum durability), but not required.
 
-The SFA inlines all README content and metadata as JSON, with client-side JavaScript for navigation between views and search across sources. Actual data files (`.db`, `.json`, `.jsonl`, etc.) are linked via relative paths — the browser can open or download them directly. Because everything is self-contained or relative, the file works from `file://` — no server required.
+The SFA inlines all README content and metadata as JSON, with client-side JavaScript for navigation between views and search across sources. Actual data files (`.db`, `.json`, `.jsonl`, etc.) are linked by relative path, so the browser can open or download them directly as long as the archive stays together. Because everything is inlined or relative, the file works from `file://` with no server.
 
 ### Self-Describing Output
 
@@ -222,7 +224,7 @@ Open index.html in any browser to explore.
 
 **Not a registry.** It doesn't maintain a central list of sources or toolkits.
 
-**Not an orchestrator.** Each toolkit (ctk, btk, etc.) exports its own data. longecho unifies the outputs but doesn't invoke or manage the toolkits.
+**Not an orchestrator.** Each tool exports its own data. longecho reads and builds over the outputs but never invokes or manages the tools.
 
 ---
 
@@ -260,14 +262,14 @@ Tools that produce longecho-compliant data. Each is self-contained, works withou
 
 | Tool | What it manages |
 |------|-----------------|
-| [memex](https://github.com/queelius/memex) | Conversation knowledge base |
+| [arkiv](https://github.com/queelius/arkiv) | Universal personal data format (JSONL to SQL); its directory exports are compliant by construction |
+| [llm-memex](https://github.com/queelius/llm-memex) | Conversation knowledge base |
 | [chartfold](https://github.com/queelius/chartfold) | Personal health data |
 | [repoindex](https://github.com/queelius/repoindex) | Git repo metadata |
 | [jot](https://github.com/queelius/jot) | Plaintext journal/notes |
 | [pagevault](https://github.com/queelius/pagevault) | Password-protected static content |
-| arkiv | Universal personal data format (JSONL to SQL) |
 
-Personal toolkits like `ctk` (conversations), `btk` (bookmarks), `ebk` (ebooks), and `mtk` (mail) also produce longecho-compliant data. They appear as illustrative examples throughout this README. The `site/` convention works with any tool that writes durable formats and a self-describing README.
+The other `*-memex` archives ([book-memex](https://github.com/queelius/book-memex), [bookmark-memex](https://github.com/queelius/bookmark-memex), [mail-memex](https://github.com/queelius/mail-memex), [photo-memex](https://github.com/queelius/photo-memex)) are not tagged, but each exports an arkiv directory, which is a longecho source with no further work. Export directories rather than bare `.zip` bundles: longecho never reads inside an archive file. Names like `ctk` in the examples above are illustrative. The `site/` convention works with any tool that writes durable formats and a self-describing README.
 
 Markdown-based sources (Hugo, Jekyll, Obsidian, etc.) are inherently longecho-compliant.
 

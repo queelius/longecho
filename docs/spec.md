@@ -68,4 +68,4 @@ Data files are source-scoped. Each source owns only the durable files it directl
 
 The generated `site/` directory is itself longecho-compliant: longecho writes it a `README.md` with frontmatter, so it appears in query results like any other source.
 
-The build refuses to clobber a `site/` produced by another tool. If the output directory's `README.md` carries a `generator` field that does not begin with "longecho build", the build stops and tells you which tool owns it. Pass `--force` to override and overwrite anyway.
+The build overwrites a non-empty `site/` only when its `README.md` carries a `generator` field beginning with "longecho build", meaning longecho made it. Any other `site/` (another tool's stamp, or a viewer with no README at all) stops the build, which tells you who owns it. Pass `--force` to overwrite anyway. Tools that write a viewer into `site/` should stamp it with `generator: <tool> <version>`.
