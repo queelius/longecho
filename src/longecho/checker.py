@@ -1,6 +1,7 @@
 """longecho compliance checker."""
 
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Optional
 
@@ -79,34 +80,50 @@ def parse_readme(readme_path: Path) -> Optional[Readme]:
     except (OSError, UnicodeDecodeError):
         return None
 
+    import markdown
+
     frontmatter, body = _split_frontmatter(content)
+    outline = _ReadmeOutline()
+    outline.feed(markdown.markdown(body, extensions=["fenced_code", "tables"]))
+    outline.close()
 
-    title = None
-    summary_lines: list[str] = []
-    in_paragraph = False
+    summary = outline.summary[:MAX_README_SUMMARY_LENGTH] if outline.summary else None
+    return Readme(frontmatter=frontmatter, title=outline.title, summary=summary)
 
-    for line in body.split("\n"):
-        stripped = line.strip()
 
-        if stripped.startswith("# ") and title is None:
-            title = stripped[2:].strip()
-            continue
+class _ReadmeOutline(HTMLParser):
+    """Collect the text of the first h1 and of the first paragraph that has text.
 
-        if stripped.startswith("#"):
-            if summary_lines:
-                break
-            continue
+    Working from rendered Markdown means comments, raw HTML blocks, badge-only
+    paragraphs, setext headings, and inline markup are all handled by the
+    parser rather than by line-by-line guesses.
+    """
 
-        if not stripped:
-            if in_paragraph:
-                break
-            continue
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.title: Optional[str] = None
+        self.summary: Optional[str] = None
+        self._open: Optional[str] = None
+        self._text: list[str] = []
 
-        in_paragraph = True
-        summary_lines.append(stripped)
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        if tag in ("h1", "p") and self._open is None:
+            self._open = tag
+            self._text = []
 
-    summary = " ".join(summary_lines)[:MAX_README_SUMMARY_LENGTH] if summary_lines else None
-    return Readme(frontmatter=frontmatter, title=title, summary=summary)
+    def handle_endtag(self, tag: str) -> None:
+        if tag != self._open:
+            return
+        text = " ".join("".join(self._text).split())
+        if text and tag == "h1" and self.title is None:
+            self.title = text
+        elif text and tag == "p" and self.summary is None:
+            self.summary = text
+        self._open = None
+
+    def handle_data(self, data: str) -> None:
+        if self._open:
+            self._text.append(data)
 
 
 @dataclass

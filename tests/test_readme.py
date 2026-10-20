@@ -89,3 +89,41 @@ class TestParseReadme:
         readme.write_text("# Title\n\n" + "x" * 600)
         result = parse_readme(readme)
         assert len(result.summary) <= 500
+
+    def test_skips_html_comment(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("<!-- license header -->\n\n# T\n\nReal description.")
+        result = parse_readme(readme)
+        assert result.title == "T"
+        assert result.summary == "Real description."
+
+    def test_skips_badge_only_paragraph(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "# T\n\n[![DOI](https://x/badge.svg)](https://x)\n\nReal description."
+        )
+        assert parse_readme(readme).summary == "Real description."
+
+    def test_skips_raw_html_block(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            '# T\n\n<p align="center"><img src="logo.png"></p>\n\nReal description.'
+        )
+        assert parse_readme(readme).summary == "Real description."
+
+    def test_setext_heading_is_title(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("My Title\n========\n\nBody.")
+        result = parse_readme(readme)
+        assert result.title == "My Title"
+        assert result.summary == "Body."
+
+    def test_inline_markup_is_plain_text(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# T\n\nA **bold** [link](http://x) and `code`.")
+        assert parse_readme(readme).summary == "A bold link and code."
+
+    def test_badges_only_readme_has_no_summary(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# T\n\n[![b](u)](v)")
+        assert parse_readme(readme).summary is None
