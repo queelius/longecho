@@ -7,7 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-19
+
+### Changed
+- **Behavior change:** `longecho build` now overwrites a non-empty `site/`
+  only when its `README.md` carries a `generator` starting with
+  "longecho build". A `site/` with another tool's stamp, a README without
+  one, or no README at all (for example a memex HTML viewer) is left alone
+  unless you pass `--force`. Previously only sites with a foreign stamp were
+  protected, so unstamped viewers were silently overwritten.
+- README titles and descriptions are read from the parsed Markdown instead
+  of a line scan. Descriptions no longer start with HTML comments, raw HTML
+  blocks, or badge markup; lists such as a table of contents no longer count
+  as the first paragraph; setext headings count as titles; inline markup
+  becomes plain text. This renders each README, so `query` over a large tree
+  is slower (0.8s to 2.0s for 269 sources in testing).
+- The version now lives only in `src/longecho/__init__.py`; `pyproject.toml`
+  reads it through `[tool.hatch.version]`.
+
+### Fixed
+- `longecho build --output` pointing at an existing file is refused instead
+  of crashing.
+
 ### Added
+- Documentation site at https://queelius.github.io/longecho/ (Material for
+  MkDocs, deployed from `main`), and a `Documentation` project URL.
 - `.gz` and `.tgz` accepted as durable archive formats. Gzip has shipped with
   every mainstream OS since 1992 and decodes without special tooling.
   Compound extensions like `.jsonl.gz`, `.csv.gz`, and `.tar.gz` qualify via

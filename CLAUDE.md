@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 longecho is both a philosophy and a tool for durable personal archives. A directory is longecho-compliant if it has a README.md/README.txt + data in durable formats. The CLI validates compliance, queries archives, and builds single-file browsable sites.
 
-**Status:** Alpha. v0.4.0 on PyPI (`pip install longecho`).
+**Status:** Alpha. v0.5.0 on PyPI (`pip install longecho`). The version lives only in `src/longecho/__init__.py`; pyproject reads it via `[tool.hatch.version]`.
 
 ## Commands
 
@@ -92,4 +92,4 @@ Build pipeline: `check_compliance` → `discover_sub_sources` (recursive) → `_
 
 Part of the `longecho-ecosystem` (GitHub topic). Tagged (check live with `gh search repos --owner queelius --topic longecho-ecosystem`): arkiv, chartfold, jot, llm-memex, pagevault, repoindex. The other `*-memex` archives (book, bookmark, mail, photo) export arkiv directories but are not tagged. `posthumous` is adjacent (same local-first stack) but not tagged.
 
-Unreleased work sits under `[Unreleased]` in CHANGELOG.md; on release, bump `version` in pyproject.toml and the status line above.
+Unreleased work sits under `[Unreleased]` in CHANGELOG.md; on release, bump `__version__` in `src/longecho/__init__.py` and the status line above.

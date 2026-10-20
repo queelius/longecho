@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "longecho"
-version = "0.4.0"
+dynamic = ["version"]
 description = "Compliance validator and site builder for durable personal archives"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -54,6 +54,9 @@ Issues = "https://github.com/queelius/longecho/issues"
 
 [project.scripts]
 longecho = "longecho.cli:app"
+
+[tool.hatch.version]
+path = "src/longecho/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/longecho"]
