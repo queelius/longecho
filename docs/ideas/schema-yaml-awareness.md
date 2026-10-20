@@ -1,7 +1,9 @@
 # schema.yaml as a recognized self-description convention
 
-**Status:** Tentative. Not on the roadmap. Not implemented.
+**Status:** Planned, blocked on arkiv. Not implemented.
 **Origin:** April 2026 conversation about how arkiv and longecho compose.
+
+**Update 2026-10-19:** the "second producer" trigger below has fired: six memex exporters now write `schema.yaml`. But they use two incompatible shapes (collection-keyed, and kind-keyed with `scheme`/`counts`/`kinds`), which is reason 3 below happening for real. arkiv will make one shape normative first; longecho then implements loose, display-only support. See `arkiv-boundary.md` and plan task C1 in `docs/superpowers/plans/2026-10-19-longecho-revival.md`.
 
 ## The shape of the idea
 
