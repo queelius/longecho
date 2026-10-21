@@ -6,7 +6,7 @@ longecho is a bet that with enough self-description and simple formats, your dat
 
 > Not resurrection. Not immortality. Just love that still responds.
 
-I build these tools under no illusion of unlimited time, which is exactly why they have to keep working without me. For the longer case, see the [The Long Echo essays](https://metafunctor.com/series/the-long-echo/).
+I build these tools under no illusion of unlimited time, which is exactly why they have to keep working without me. For the longer case, see [The Long Echo essays](https://metafunctor.com/series/the-long-echo/).
 
 ## Five principles
 
@@ -22,7 +22,7 @@ I build these tools under no illusion of unlimited time, which is exactly why th
 
 ## Graceful degradation
 
-The whole design rests on this table. Each row survives the loss of the row above it.
+The whole design rests on this table. The rows run roughly from the richest reader to the plainest.
 
 | If you have... | You can still... | Because the archive keeps... |
 |----------------|------------------|------------------------------|
@@ -33,7 +33,7 @@ The whole design rests on this table. Each row survives the loss of the row abov
 | A text editor | Read plain text files | Markdown, plain text, JSON, JSONL, CSV, YAML, email |
 | Only fragments | Understand each piece independently | A README in every piece |
 
-Read across, the table is one rule: for each kind of reader, the archive holds at least one copy of what matters in a format that reader can still open. The early essays told this twice, once as a ladder of readers and once as a ladder of formats (the same conversations kept as a database, as JSONL, as Markdown, as HTML, as plain text). Those are the same ladder seen from its two ends. `longecho formats` shows which reader opens each recognized format.
+Read across, the table is one rule: for each kind of reader, the archive holds at least one copy of what matters in a format that reader can still open. `longecho formats` shows which reader opens each recognized format.
 
 A directory is **longecho-compliant** when it has a README explaining what the data is plus data stored in durable formats. That is the entire contract. No schema, no version numbers, no special files.
 

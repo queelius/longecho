@@ -14,6 +14,7 @@ from .checker import (
 __all__ = [
     "SKIP_DIRECTORIES",
     "discover_sources",
+    "get_source_info",
     "matches_query",
     "search_sources",
     "should_skip_directory",

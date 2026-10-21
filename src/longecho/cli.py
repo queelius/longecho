@@ -7,14 +7,21 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
 from . import __version__
 from .build import build_site, make_json_safe
-from .checker import ComplianceWarning, check_compliance, find_warnings
+from .checker import ComplianceWarning, EchoSource, check_compliance
 from .discovery import discover_sources, search_sources
-from .formats import DURABILITY_CRITERIA, DURABLE_FORMAT_CATEGORIES, FORMATS, Reader
+from .formats import (
+    DURABILITY_CRITERIA,
+    DURABLE_FORMAT_CATEGORIES,
+    FORMATS,
+    Reader,
+    format_for,
+)
 
 app = typer.Typer(
     name="longecho",
@@ -35,16 +42,21 @@ def _truncate(text: str, max_length: int) -> str:
     return text[: max_length - 3] + "..."
 
 
+def _lit(value: object) -> str:
+    """Untrusted text (paths, README fields, messages) for a markup string."""
+    return escape(str(value))
+
+
 def _print_warnings(
     warnings: list[ComplianceWarning], root: Path, verbose: bool
 ) -> None:
     """Print warnings under a check result; with verbose, name the files."""
     for w in warnings:
-        console.print(f"  [yellow]![/yellow] {w.message}", highlight=False)
+        console.print(f"  [yellow]![/yellow] {_lit(w.message)}", highlight=False)
         if not verbose:
             continue
         for p in w.paths[:MAX_WARNING_PATHS]:
-            console.print(f"      [dim]{p.relative_to(root).as_posix()}[/dim]", highlight=False)
+            console.print(f"      [dim]{_lit(p.relative_to(root).as_posix())}[/dim]", highlight=False)
         if len(w.paths) > MAX_WARNING_PATHS:
             console.print(f"      [dim]and {len(w.paths) - MAX_WARNING_PATHS} more[/dim]")
 
@@ -98,23 +110,26 @@ def check(
     result = check_compliance(path)
 
     if result.compliant:
-        console.print(f"[green]\u2713[/green] longecho-compliant: {path}")
+        console.print(f"[green]\u2713[/green] longecho-compliant: {_lit(path)}")
 
         if verbose and result.source:
             s = result.source
             console.print()
-            console.print(f"  [dim]README:[/dim] {s.readme_path.name}")
+            console.print(f"  [dim]README:[/dim] {_lit(s.readme_path.name)}")
             if s.description:
-                console.print(f"  [dim]Description:[/dim] {_truncate(s.description, 100)}")
+                console.print(f"  [dim]Description:[/dim] {_lit(_truncate(s.description, 100))}")
             console.print(f"  [dim]Durable formats:[/dim] {', '.join(s.durable_formats)}")
+            readers = _source_readers(s)
+            if readers:
+                console.print(f"  [dim]Readable with:[/dim] {readers}")
             if s.frontmatter:
                 for key, val in s.frontmatter.items():
                     if key not in ("name", "description", "contents"):
-                        console.print(f"  [dim]{key}:[/dim] {val}")
+                        console.print(f"  [dim]{_lit(key)}:[/dim] {_lit(val)}")
         _print_warnings(result.warnings, path, verbose)
     else:
-        console.print(f"[red]\u2717[/red] Not longecho-compliant: {path}")
-        console.print(f"  [dim]Reason:[/dim] {result.reason}")
+        console.print(f"[red]\u2717[/red] Not longecho-compliant: {_lit(path)}")
+        console.print(f"  [dim]Reason:[/dim] {_lit(result.reason)}")
         _print_warnings(result.warnings, path, verbose)
         raise typer.Exit(code=1)
 
@@ -176,7 +191,7 @@ def query(
             }
             if s.frontmatter:
                 entry["frontmatter"] = make_json_safe(s.frontmatter)
-            warnings = find_warnings(s.path, s.files)
+            warnings = s.warnings
             if warnings:
                 entry["warnings"] = [
                     {
@@ -192,7 +207,7 @@ def query(
 
     if not sources:
         label = f"matching '{search}'" if search else f"under {path}"
-        console.print(f"[yellow]No longecho sources found {label}[/yellow]")
+        console.print(f"[yellow]No longecho sources found {_lit(label)}[/yellow]")
         return
 
     if table_format:
@@ -204,10 +219,10 @@ def query(
 
         for s in sources:
             table.add_row(
-                s.name,
-                str(s.path),
+                Text(str(s.name)),
+                Text(str(s.path)),
                 ", ".join(s.durable_formats[:3]),
-                _truncate(s.description or "", 50),
+                Text(_truncate(s.description or "", 50)),
             )
 
         console.print(table)
@@ -226,9 +241,9 @@ def query(
                 display_path = str(s.path)
             indent = "  " * depth_level
 
-            console.print(f"{indent}[cyan]{s.name}[/cyan]  [dim]{display_path}[/dim]")
+            console.print(f"{indent}[cyan]{_lit(s.name)}[/cyan]  [dim]{_lit(display_path)}[/dim]")
             if s.description:
-                console.print(f"{indent}  [dim]{_truncate(s.description, 80)}[/dim]")
+                console.print(f"{indent}  [dim]{_lit(_truncate(s.description, 80))}[/dim]")
             console.print()
 
 
@@ -261,20 +276,20 @@ def build(
     ),
 ):
     """Build a single-file static site from a longecho archive."""
-    console.print(f"[bold]Building site for:[/bold] {path}")
+    console.print(f"[bold]Building site for:[/bold] {_lit(path)}")
 
     result = build_site(path=path, output=output, force=force)
 
     if result.success:
         console.print(f"[green]\u2713[/green] Built site with {result.sources_count} source(s)")
-        console.print(f"  [dim]Output:[/dim] {result.output_path}")
+        console.print(f"  [dim]Output:[/dim] {_lit(result.output_path)}")
 
         if open_browser and result.output_path:
             import webbrowser
             index = result.output_path / "index.html"
             webbrowser.open(index.as_uri())
     else:
-        console.print(f"[red]\u2717[/red] Build failed: {result.error}")
+        console.print(f"[red]\u2717[/red] Build failed: {_lit(result.error)}")
         raise typer.Exit(code=1)
 
 
@@ -285,23 +300,24 @@ def _format_spec() -> str:
         "",
         "A directory is longecho-compliant if it has:",
         "  1. A README.md or README.txt explaining the data",
-        "  2. Data stored in durable formats",
+        "  2. At least one file in a durable format, within two levels of the README",
         "",
         "Core Principles:",
         "  Self-Describing       Every collection explains itself via README",
         "  Durable Formats       Formats readable without proprietary software",
-        "  Graceful Degradation  Works with LLMs, browsers, standard tools, or text editors",
+        "  Graceful Degradation  Useful with LLMs, standard tools, browsers, editors",
         "  Local-First           Complete without cloud services",
         "  Trust the Future      Simple over \"correct\"; future humans are smart",
         "",
         "The README:",
-        "  The README is the interface. Optional YAML frontmatter adds structured metadata.",
-        "  Special fields: name, description, contents (controls build curation/ordering).",
+        "  The README is the interface. Optional YAML frontmatter adds metadata.",
+        "  Special fields: name, description, contents (build curation and order).",
         "  All other frontmatter is preserved, displayed, and queryable.",
-        "  The top-level README is where a reader with no context starts: write it for",
-        "  someone who has none of your tools, and say how to open each kind of file.",
+        "  The top-level README is where a reader with no context starts: write it",
+        "  for someone with none of your tools, and say how to open each file type.",
         "",
-        "  Name cascade: frontmatter name > # Heading > directory name",
+        "  Name cascade:        frontmatter name > first # heading > directory name",
+        "  Description cascade: frontmatter description > first paragraph",
         "",
         "Nesting:",
         "  Sources can contain other sources. Structure is recursive: every level is",
@@ -325,6 +341,10 @@ def _format_spec() -> str:
     lines += [
         "",
         "  `longecho formats` shows who can open each format, and why it qualifies.",
+        "",
+        "Warnings (never change the verdict):",
+        "  Files neither in a durable format nor UTF-8 text; SQLite databases with",
+        "  changes still in a -wal or -journal file; directories too deep to inspect.",
         "",
         "The site/ Convention:",
         "  longecho build generates a single-file application (site/index.html) with all",
@@ -350,6 +370,16 @@ def _indented(text: str, indent: int) -> str:
     )
 
 
+def _source_readers(source: EchoSource) -> str:
+    """Which readers can open some of this source's own durable files."""
+    readers: set[Reader] = set()
+    for f in source.files:
+        fmt = format_for(f)
+        if fmt is not None:
+            readers |= fmt.readers
+    return _readers_label(frozenset(readers))
+
+
 def _readers_label(readers: frozenset[Reader]) -> str:
     """Readers in ladder order (the enum's order), joined for display."""
     return ", ".join(r.value for r in Reader if r in readers)
@@ -371,6 +401,7 @@ def formats(
                 "extensions": list(f.extensions),
                 "mimetype": f.mimetype,
                 "category": f.category,
+                "mimetype_aliases": list(f.mimetype_aliases),
                 "readers": [r.value for r in Reader if r in f.readers],
                 "rationale": f.rationale,
             }

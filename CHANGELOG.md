@@ -8,43 +8,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- A durable format registry, `longecho.formats.FORMATS`. Each entry records
-  its extensions, media type, category, the readers that can open it
-  (standard tool, web browser, text editor), and the reason it qualifies
-  under the Library of Congress sustainability factors, which are now the
-  written criteria for the list. `DURABLE_EXTENSIONS` and
-  `DURABLE_FORMAT_CATEGORIES` are derived from it and keep working.
+- A durable format list, `longecho.formats.FORMATS`. Each entry records its
+  extensions, media type (plus common aliases such as `audio/x-wav`),
+  category, the readers that can open it (standard tool, web browser, text
+  editor), and the reason it qualifies under the Library of Congress
+  sustainability factors, which are now the written criteria for the list.
+  `DURABLE_EXTENSIONS` and `DURABLE_FORMAT_CATEGORIES` are derived from it and
+  keep working. `is_durable_mimetype()` answers for tools that record media
+  types (any case, parameters allowed).
 - New durable formats: `.pdf`, `.epub`, `.eml`, `.mbox`, `.svg`, `.tif`,
-  `.tiff`, `.wav`, `.flac`, `.mp3`, `.ogg`, `.opus`, `.mp4`, `.webm`, with
-  new Mail, Audio, and Video categories. A directory holding only one of
-  these plus a README is now compliant.
-- Compliance warnings: `ComplianceResult.warnings` lists
+  `.tiff`, `.wav`, `.flac`, `.mp3`, `.ogg`, `.opus`, `.mp4`, `.webm`, with new
+  Mail, Audio, and Video categories. A directory holding only one of these
+  plus a README is now compliant.
+- Compliance warnings, which never change the verdict or exit code:
+  `ComplianceResult.warnings` and `EchoSource.warnings` list
   `ComplianceWarning(kind, message, paths)` for files that are neither in a
-  recognized format nor plain text (grouped by extension) and for SQLite
-  databases with a non-empty `-wal` or `-journal` sidecar. A file with an
-  unknown extension whose first 4 KB is UTF-8 without NUL bytes (source
-  code, `LICENSE`, `.tex`) counts as plain text and does not warn; this is
-  the one place longecho reads inside a file, and it never affects
-  compliance (`longecho.formats.reads_as_text`). Warnings never change the verdict or exit code, and
-  are reported on failing results too. `check` prints them (`--verbose`
-  names the files); `query --json` includes them when present.
+  durable format nor UTF-8 text (grouped by extension), SQLite databases with
+  a non-empty `-wal` or `-journal` sidecar, and directories more than two
+  levels down that nothing inspected. Telling text from binary reads the
+  first 4 KB of a file whose extension is not on the list; that is the only
+  place longecho reads inside a data file, and warnings are computed only
+  when something asks for them, so `query` without `--json` reads no file
+  contents. `check` prints warnings (`--verbose` names the files);
+  `query --json` includes them when present.
+- `check --verbose` shows which readers can open the source's own files.
 - `longecho formats` shows each format's readers and reason;
-  `longecho formats --json` prints the registry as data.
+  `longecho formats --json` prints the list as data.
 - `EchoSource.files`: every file a source owns, durable or not.
 - Inline previews in the generated site for images, audio, and video that
-  browsers play, derived from the registry (lazy-loaded).
+  browsers play, using the browser's own elements (lazy-loaded).
 
 ### Changed
-- The generated site lists every file a source owns, marking files that are
-  neither in a recognized format nor plain text, instead of silently leaving
-  them out. SQLite
-  sidecars are not listed.
+- **Behavior change:** durable files inside `site/` or tool folders
+  (`node_modules`, `venv`, `dist`, and the like) no longer make a directory
+  compliant. A viewer is not the data. Durable files in nested sources still
+  count.
+- **Behavior change:** lowercase `readme.md` and `readme.txt` no longer count
+  as their own data file, the same as `README.md` always has.
+- The generated site lists every file a source owns (within two levels,
+  minus SQLite sidecars), marking the ones `check` warns about, instead of
+  only the durable ones.
+- README HTML in the site is sanitized by an allowlist (an `HTMLParser` that
+  keeps known tags, attributes, and URL schemes) instead of regular
+  expressions.
 - The degradation ladder is one table that pairs each kind of reader with
   the formats it can open, with a new "standard tools" rung. It replaces the
   separate format ladder of the early essays.
 - The top-level README is the archive's "start here" note; the spec now says
   so and describes what it should contain. `START_HERE.txt` from the early
   essays is retired.
+- `longecho spec` fits 80 columns and covers warnings and the description
+  cascade.
 - `should_skip_directory` and `SKIP_DIRECTORIES` live in `checker.py`
   (still importable from `discovery`).
 
@@ -52,10 +66,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Links in the generated site were computed relative to the archive root,
   but the page lives in `site/`, so every "Data Files" link and every "Open
   interactive viewer" link pointed into `site/` and returned not found.
-  Links are now relative to the page (`../photos/a.png`). A site written with
-  `--output` outside the archive links by absolute `file://` URI; before,
-  that check compared against the output's parent and could pick a
-  relative path that did not resolve.
+  Links are now relative to the page and percent-encoded, so names with
+  spaces, `#`, `?`, `%`, or a colon work and can never become a URL scheme.
+  A site written outside the archive, or a source that is a symlink to
+  somewhere else, links by absolute `file://` URI.
+- An entity-encoded `javascript:` link in a README (`jav&#97;script:`) got
+  past the old sanitizer.
+- `longecho build --output` pointing at the archive itself, or at a
+  directory containing it, overwrote that directory's README. It is now
+  refused, with or without `--force`.
+- Building twice into the same custom `--output` inside the archive turned
+  the first build into a sub-source of the second.
+- Filenames and README text containing Rich markup such as `[red]` were
+  rendered as styles by the CLI, and unbalanced markup crashed `check`.
+  They are now printed literally.
 
 ## [0.5.0] - 2026-10-19
 

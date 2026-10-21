@@ -1,11 +1,13 @@
 """longecho site builder -- generates a single-file application from a longecho archive."""
 
 import os
-import re
 from dataclasses import dataclass
 from datetime import date, datetime
+from html import escape
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote, urlsplit
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
@@ -16,7 +18,10 @@ from .checker import (
     parse_readme,
     should_skip_directory,
 )
-from .formats import format_for, preview_kind, reads_as_text, sidecar_base
+from .formats import format_for, is_unrecognized, preview_kind, sidecar_base
+
+# The prefix of the generator stamp longecho writes into each site README.
+LONGECHO_GENERATOR = "longecho build"
 
 # Reported in place of a generator name when a site/ carries no stamp.
 UNKNOWN_GENERATOR = "an unknown tool (no longecho generator stamp)"
@@ -40,35 +45,86 @@ def get_jinja_env() -> Environment:
     )
 
 
+# Tags Python-Markdown emits, and the attributes each may keep. Anything else
+# is dropped (its text kept), and _DROP_WITH_CONTENT loses its text too.
+_ALLOWED_TAGS: dict[str, frozenset[str]] = {
+    **{tag: frozenset() for tag in (
+        "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr", "em", "strong",
+        "b", "i", "code", "pre", "blockquote", "ul", "ol", "li", "table",
+        "thead", "tbody", "tr", "del", "sup", "sub", "dl", "dt", "dd", "span",
+        "div", "abbr", "kbd", "details", "summary",
+    )},
+    "a": frozenset({"href", "title"}),
+    "img": frozenset({"src", "alt", "title"}),
+    "th": frozenset({"align"}),
+    "td": frozenset({"align"}),
+}
+_VOID_TAGS = frozenset({"br", "hr", "img"})
+_DROP_WITH_CONTENT = frozenset({
+    "script", "style", "iframe", "object", "embed", "template", "noscript",
+    "svg", "math", "textarea", "select", "head", "title",
+})
+_URL_ATTRS = frozenset({"href", "src"})
+_SAFE_SCHEMES = frozenset({"", "http", "https", "mailto", "file"})
+
+
+def _safe_url(value: str) -> bool:
+    """Relative links and a few plain schemes only. Browsers ignore control
+    characters and whitespace inside a scheme, so those are removed first."""
+    cleaned = "".join(ch for ch in value if ch > " " and ch != "\x7f")
+    return urlsplit(cleaned).scheme.lower() in _SAFE_SCHEMES
+
+
+class _Sanitizer(HTMLParser):
+    """Re-serialize HTML keeping only allowlisted tags, attributes, and URLs.
+
+    The parser has already decoded entities in attribute values, so a URL
+    like ``jav&#97;script:`` is checked as the ``javascript:`` it really is.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.out: list[str] = []
+        self._dropping = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        if tag in _DROP_WITH_CONTENT:
+            self._dropping += 1
+            return
+        if self._dropping or tag not in _ALLOWED_TAGS:
+            return
+        kept = []
+        for name, value in attrs:
+            if name not in _ALLOWED_TAGS[tag] or value is None:
+                continue
+            if name in _URL_ATTRS and not _safe_url(value):
+                continue
+            kept.append(f' {name}="{escape(value, quote=True)}"')
+        self.out.append(f"<{tag}{''.join(kept)}>")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag in _DROP_WITH_CONTENT:
+            self._dropping -= 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _DROP_WITH_CONTENT:
+            self._dropping = max(0, self._dropping - 1)
+            return
+        if not self._dropping and tag in _ALLOWED_TAGS and tag not in _VOID_TAGS:
+            self.out.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if not self._dropping:
+            self.out.append(escape(data, quote=False))
+
+
 def _sanitize_html(html: str) -> str:
-    """Strip dangerous HTML elements from rendered markdown."""
-    # Remove dangerous tags with content
-    html = re.sub(
-        r"<(script|style|iframe|object|embed)\b[^>]*>.*?</\1>",
-        "", html, flags=re.DOTALL | re.IGNORECASE,
-    )
-    # Remove self-closing dangerous tags
-    html = re.sub(
-        r"<(script|style|iframe|object|embed|base|meta|link)\b[^>]*/?>",
-        "", html, flags=re.IGNORECASE,
-    )
-    # Remove opening-only dangerous tags (base, meta, link are void elements)
-    html = re.sub(
-        r"<(base|meta|link)\b[^>]*>",
-        "", html, flags=re.IGNORECASE,
-    )
-    # Remove form tags
-    html = re.sub(r"</?form\b[^>]*>", "", html, flags=re.IGNORECASE)
-    # Remove on* event handlers (quoted)
-    html = re.sub(r"\s+on\w+\s*=\s*[\"'][^\"']*[\"']", "", html, flags=re.IGNORECASE)
-    # Remove on* event handlers (unquoted, stop at > or whitespace)
-    html = re.sub(r"\s+on\w+\s*=\s*[^\s>]+", "", html, flags=re.IGNORECASE)
-    # Remove javascript: URIs in href/src/action attributes
-    html = re.sub(
-        r'(href|src|action)\s*=\s*["\']?\s*javascript:[^"\'>\s]*["\']?',
-        "", html, flags=re.IGNORECASE,
-    )
-    return html
+    """Keep the formatting of rendered Markdown, drop anything that can run."""
+    sanitizer = _Sanitizer()
+    sanitizer.feed(html)
+    sanitizer.close()
+    return "".join(sanitizer.out)
 
 
 def markdown_to_html(content: str) -> str:
@@ -82,13 +138,17 @@ def markdown_to_html(content: str) -> str:
 def _link(target: Path, output_path: Path, root: Path) -> str:
     """The href that reaches ``target`` from the page at ``output_path/index.html``.
 
-    When the site lives inside the archive, links are relative (``../photos/a.png``)
-    so the archive can move as a whole. A site written outside the archive links
-    by absolute ``file://`` URI, since no relative path survives moving either one.
+    When both the site and the target live inside the archive, links are
+    relative and percent-encoded (``../photos/a%20b.png``), so the archive can
+    move as a whole and no filename can turn into a URL scheme, query, or
+    fragment. Otherwise (a site written outside the archive, or a symlinked
+    source that lives elsewhere) the link is an absolute ``file://`` URI,
+    since no relative path survives moving either one.
     """
-    if output_path.resolve().is_relative_to(root.resolve()):
+    root = root.resolve()
+    if output_path.resolve().is_relative_to(root) and target.resolve().is_relative_to(root):
         try:
-            return Path(os.path.relpath(target, output_path)).as_posix()
+            return quote(Path(os.path.relpath(target, output_path)).as_posix())
         except ValueError:  # different drives on Windows
             pass
     return target.resolve().as_uri()
@@ -99,10 +159,10 @@ def _get_data_files(
 ) -> list[dict]:
     """List every file this source owns, for the SFA's "Data Files" section.
 
-    Ownership (see ``EchoSource.files``) already stops at nested sources and
-    ``site/``. Files in formats longecho does not recognize are listed too,
-    with ``durable: False``, so the site never hides part of the archive;
-    ``plain_text`` says whether a text editor can still open such a file.
+    Ownership (see ``EchoSource.files``) already stops at nested sources,
+    ``site/``, and the scan depth. Files outside the format list are listed
+    too; ``warns`` marks the ones that ``check`` warns about (neither in a
+    durable format nor UTF-8 text), so the page applies no rule of its own.
     SQLite sidecars are left out: they belong to their database. ``preview``
     names the inline element a browser can show the file with, if any.
     """
@@ -112,12 +172,11 @@ def _get_data_files(
     for item in source.files:
         if sidecar_base(item) is not None:
             continue
-        durable = format_for(item) is not None
         files.append({
             "name": item.relative_to(source.path).as_posix(),
             "path": _link(item, output_path, root),
-            "durable": durable,
-            "plain_text": not durable and reads_as_text(item),
+            "durable": format_for(item) is not None,
+            "warns": is_unrecognized(item),
             "preview": preview_kind(item),
         })
 
@@ -136,13 +195,24 @@ def _is_foreign_site(output_path: Path) -> tuple[bool, str]:
     """
     if output_path.is_dir() and not any(output_path.iterdir()):
         return False, ""
-    readme_path = output_path / "README.md"
-    readme = parse_readme(readme_path) if readme_path.is_file() else None
-    generator = (readme.frontmatter or {}).get("generator") if readme else None
+    generator = _site_generator(output_path)
     if not generator:
         return True, UNKNOWN_GENERATOR
-    gen_str = str(generator)
-    return not gen_str.startswith("longecho build"), gen_str
+    return not generator.startswith(LONGECHO_GENERATOR), generator
+
+
+def _site_generator(path: Path) -> Optional[str]:
+    """The ``generator`` stamp in ``path/README.md`` frontmatter, if any."""
+    readme_path = path / "README.md"
+    readme = parse_readme(readme_path) if readme_path.is_file() else None
+    generator = (readme.frontmatter or {}).get("generator") if readme else None
+    return str(generator) if generator else None
+
+
+def _is_longecho_site(path: Path) -> bool:
+    """A directory longecho build wrote: a view of the archive, not part of it."""
+    generator = _site_generator(path)
+    return generator is not None and generator.startswith(LONGECHO_GENERATOR)
 
 
 def discover_sub_sources(source: EchoSource) -> list[EchoSource]:
@@ -170,6 +240,8 @@ def discover_sub_sources(source: EchoSource) -> list[EchoSource]:
             if not item.is_dir():
                 continue
             if item.name == "site" or should_skip_directory(item.name):
+                continue
+            if _is_longecho_site(item):  # an earlier build --output
                 continue
 
             result = check_compliance(item)
@@ -246,7 +318,7 @@ def _generate_site_readme(
     frontmatter = {
         "name": f"{name} Site",
         "description": "Static site generated from longecho archive",
-        "generator": f"longecho build v{__version__}",
+        "generator": f"{LONGECHO_GENERATOR} v{__version__}",
         "datetime": now,
         "contents": [
             {"path": "index.html", "description": "Single-file browsable archive"},
@@ -300,6 +372,18 @@ def build_site(
     top_level_children = discover_sub_sources(root_source)
 
     output_path = Path(output).resolve() if output else path / "site"
+
+    # Writing index.html and README.md into the archive itself, or into a
+    # directory that contains it, would replace a README someone wrote.
+    if path.is_relative_to(output_path):
+        return BuildResult(
+            success=False,
+            error=(
+                f"Refusing to write the site into {output_path}: it is the archive "
+                f"or contains it, and its README.md would be overwritten. "
+                f"Choose an --output inside the archive (the default is site/) or elsewhere."
+            ),
+        )
 
     # Protect foreign-generated sites from accidental overwrite
     if output_path.exists() and not force:

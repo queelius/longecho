@@ -42,7 +42,7 @@ Read across, the table is one rule: for each kind of reader, keep at least one c
 A directory is **longecho-compliant** if it has:
 
 1. A `README.md` or `README.txt` at the root explaining what the data is
-2. Data stored in durable formats
+2. Data stored in durable formats, within two levels of that README (files in `site/` or in tool folders such as `node_modules` do not count)
 
 That's it. No special files, no schema, no version numbers.
 
@@ -67,9 +67,7 @@ Gzipped files are recognized by their terminal `.gz` suffix, so `.jsonl.gz`, `.c
 
 Archive formats (`.zip`, `.gz`, `.tgz`) are recognized as durable because their readers are universally available and well-documented. longecho does not traverse into archives. A packed archive is treated as an opaque durable artifact: its presence satisfies the "durable format" requirement, but its contents are not inspected, validated, or indexed by longecho. To work with what is inside, extract first and operate on the resulting directory. This matches how archives are used everywhere else in computing: they are transport containers, not working formats.
 
-### Warnings
-
-`longecho check` also warns, without failing, about two things a future reader could lose: files that are neither in a recognized format nor plain text (listed by extension; a `.py` or a `LICENSE` is plain text and does not warn), and SQLite databases whose recent changes still sit in a non-empty `-wal` or `-journal` file beside them. Telling text from binary is the one place longecho reads inside a file (the first 4 KB), and it never changes the verdict. The generated site lists every file and marks the ones that warn, so nothing in the archive is hidden.
+`longecho check` also warns, without failing, about what a future reader could lose: files that are neither in a durable format nor UTF-8 text, SQLite databases with changes still in a `-wal` or `-journal` file, and directories too deep for it to inspect. See the [specification](https://queelius.github.io/longecho/spec/) for the details.
 
 ---
 
@@ -111,7 +109,7 @@ Three fields change how the longecho tool behaves:
 | Field | Behavior |
 |-------|----------|
 | `name` | Used as the source name. Cascade: frontmatter `name` > `# Heading` > directory name |
-| `description` | Used as the source description. Cascade: frontmatter `description` > first paragraph after heading |
+| `description` | Used as the source description. Cascade: frontmatter `description` > first paragraph |
 | `contents` | Lists what's in this directory. The tool uses it for build curation and ordering (see below) |
 
 ### All Other Frontmatter
@@ -169,7 +167,7 @@ When `contents` is present, `longecho build` uses it as follows:
 - **Directory entries** (`conversations/`, `bookmarks/`) control **curation** and **ordering** of sub-sources. Only listed directories become navigable sub-sources in the build output, and they appear in the order listed.
 - **File entries** (`ctk.db`) are **informational metadata**: they describe what's in the directory for humans and LLMs who read the README, but do not affect build structure. They are preserved in the frontmatter (where any reader can see them), but longecho does not surface them separately in the generated site.
 
-When `contents` is absent, the tool auto-discovers all longecho-compliant subdirectories in alphabetical order, and all durable data files in the directory appear in the site's "Data Files" list.
+When `contents` is absent, the tool auto-discovers all longecho-compliant subdirectories in alphabetical order, and the files the directory owns (within two levels, outside nested sources) appear in the site's "Data Files" list.
 
 Each sub-source is always self-describing. The parent's `contents` field controls which children appear and in what order, but never overrides a child's own name or description.
 
@@ -195,7 +193,7 @@ my-archive/
 ├── bookmarks/
 │   └── ...
 └── site/
-    ├── README.md          ← self-describing (generator: longecho)
+    ├── README.md          ← self-describing (generator: longecho build v0.6.0)
     └── index.html         ← longecho's archive navigator
 ```
 
@@ -207,7 +205,7 @@ The pattern is fractal: a parent SFA links to its children's sites. `longecho bu
 
 `longecho build` generates a self-contained `site/index.html`: a single-file application with all content, CSS, and JavaScript inlined, and no external dependencies. Single-file is recommended for all `site/` generators (maximum durability), but not required.
 
-The SFA inlines all README content and metadata as JSON, with client-side JavaScript for navigation between views and search across sources. Actual data files (`.db`, `.json`, `.jsonl`, etc.) are linked by relative path, so the browser can open or download them directly as long as the archive stays together. Images, audio, and video the browser can play are previewed inline. Because everything is inlined or relative, the file works from `file://` with no server.
+The SFA inlines all README content and metadata as JSON, with client-side JavaScript for navigation between views and search across sources. Actual data files (`.db`, `.json`, `.jsonl`, etc.) are linked by relative path, so the browser can open or download them directly as long as the archive stays together. Images, audio, and video the browser can play are previewed inline, with the browser's own elements: no decoders, no generated thumbnails. Because everything is inlined or relative, the file works from `file://` with no server.
 
 ### Self-Describing Output
 
@@ -217,14 +215,14 @@ The generated `site/` directory is itself longecho-compliant:
 ---
 name: My Archive Site
 description: Static site generated from longecho archive
-generator: longecho build v0.3.0
+generator: longecho build v0.6.0
 datetime: 2026-02-18T14:30:00
 contents:
   - path: index.html
     description: Single-file browsable archive
 ---
 
-Generated by longecho from 2 sources: conversations, bookmarks.
+Generated by longecho from 2 source(s): conversations, bookmarks.
 Open index.html in any browser to explore.
 ```
 
@@ -266,7 +264,7 @@ longecho build ~/my-archive/ --open    # Open in browser after build
 
 longecho spec                          # Print specification summary
 longecho formats                       # Durable formats: who opens each, and why
-longecho formats --json                # The same registry as data
+longecho formats --json                # The same list as data
 ```
 
 ---

@@ -2,8 +2,10 @@
 
 import os
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import cached_property
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Optional
@@ -13,8 +15,7 @@ import yaml
 from .formats import (
     DURABLE_EXTENSIONS,
     DURABLE_FORMAT_CATEGORIES,
-    format_for,
-    reads_as_text,
+    is_unrecognized,
     sidecar_base,
 )
 
@@ -38,8 +39,10 @@ __all__ = [
 # In lookup order: the first one present is the source's README.
 README_NAMES: tuple[str, ...] = ("README.md", "README.txt", "readme.md", "readme.txt")
 
+# Files that describe a directory or a code project rather than hold its
+# data. They never count toward compliance and are not listed as data.
 EXCLUDE_PATTERNS: set[str] = {
-    "README.md", "README.txt",
+    *README_NAMES,
     "CLAUDE.md", "CHANGELOG.md",
     ".gitignore", ".gitattributes",
     "pyproject.toml", "setup.py", "setup.cfg",
@@ -169,7 +172,15 @@ class EchoSource:
     contents: Optional[list[dict]] = None
     # Every file this source owns, durable or not, sorted. Files inside nested
     # sources, site/, and skipped directories belong elsewhere.
-    files: list[Path] = field(default_factory=list)
+    files: list[Path] = field(default_factory=list, repr=False)
+    # Owned directories below the scan depth, which nothing looked inside.
+    unscanned: list[Path] = field(default_factory=list, repr=False)
+
+    @cached_property
+    def warnings(self) -> list["ComplianceWarning"]:
+        """Computed on first access, so a tree walk that never shows warnings
+        never reads file contents."""
+        return find_warnings(self.path, self.files, self.unscanned)
 
     def __str__(self) -> str:
         desc = self.description or "No description"
@@ -183,6 +194,7 @@ class WarningKind(Enum):
 
     UNRECOGNIZED_FORMAT = "unrecognized-format"
     SIDECAR_AT_RISK = "sidecar-at-risk"
+    NOT_INSPECTED = "not-inspected"
 
 
 @dataclass
@@ -202,7 +214,16 @@ class ComplianceResult:
     path: Path
     reason: Optional[str] = None
     source: Optional[EchoSource] = None  # populated when compliant
-    warnings: list[ComplianceWarning] = field(default_factory=list)
+    # What the walk found, kept so warnings can be computed on a failing result.
+    files: list[Path] = field(default_factory=list, repr=False)
+    unscanned: list[Path] = field(default_factory=list, repr=False)
+
+    @cached_property
+    def warnings(self) -> list[ComplianceWarning]:
+        """Warnings for this directory, computed on first access."""
+        if self.source is not None:
+            return self.source.warnings
+        return find_warnings(self.path, self.files, self.unscanned)
 
     def __str__(self) -> str:
         if self.compliant:
@@ -223,35 +244,67 @@ def find_readme(path: Path) -> Optional[Path]:
 class _Inventory:
     """What one walk of a directory found."""
 
-    durable: set[str]  # durable suffixes anywhere in the walk
+    durable: set[str]  # durable suffixes, from this source and nested ones
     owned: list[Path]  # files the source itself owns (see EchoSource.files)
+    unscanned: list[Path]  # owned directories below max_depth, not looked into
+
+
+def _entry_kind(entry: os.DirEntry) -> Optional[str]:
+    """'file', 'dir', or None for anything unreadable (broken or looping links)."""
+    try:
+        if entry.is_file():
+            return "file"
+        if entry.is_dir():
+            return "dir"
+    except OSError:
+        pass
+    return None
+
+
+def _has_readme(entries: list[os.DirEntry]) -> bool:
+    return any(e.name in README_NAMES and _entry_kind(e) == "file" for e in entries)
+
+
+def _list_dir(path: Path) -> Optional[list[os.DirEntry]]:
+    try:
+        with os.scandir(path) as it:
+            return sorted(it, key=lambda e: e.name)
+    except OSError:
+        return None
+
+
+def _worth_reporting(path: Path) -> bool:
+    """Whether an unscanned directory may hide data this source owns."""
+    entries = _list_dir(path)
+    if entries is None:
+        return True  # unreadable, so certainly not inspected
+    visible = [e for e in entries if not e.name.startswith(".")]
+    return bool(visible) and not _has_readme(visible)
 
 
 def _take_inventory(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> _Inventory:
     """Walk ``path`` once, collecting durable suffixes and the source's own files.
 
-    Durable suffixes are collected from the whole walk, nested sources and
-    site/ included, so an archive whose data lives entirely in sub-sources is
-    still compliant. Ownership stops at nested sources, site/, and skipped
-    directories, which hold someone else's files. ``os.scandir`` supplies each
-    entry's type without a separate stat, which keeps ``query ~`` fast.
+    Durable suffixes count from nested sources too, so an archive whose data
+    lives entirely in sub-sources is compliant. ``site/`` and tool directories
+    (``SKIP_DIRECTORIES``) are not entered at all: a viewer or a dependency
+    folder is not the data. Ownership stops at nested sources. ``os.scandir``
+    supplies each entry's type without a separate stat, which keeps
+    ``query ~`` fast, and entries whose type cannot be read are skipped.
     """
-    inventory = _Inventory(durable=set(), owned=[])
+    inventory = _Inventory(durable=set(), owned=[], unscanned=[])
 
     def scan(dir_path: Path, depth: int, owned: bool) -> None:
-        if depth > max_depth:
+        entries = _list_dir(dir_path)
+        if entries is None:
             return
-        try:
-            with os.scandir(dir_path) as it:
-                entries = sorted(it, key=lambda e: e.name)
-        except OSError:
-            return
-        if depth > 0 and any(e.name in README_NAMES and e.is_file() for e in entries):
+        if depth > 0 and _has_readme(entries):
             owned = False  # a nested source owns what is under it
         for entry in entries:
             if entry.name.startswith("."):
                 continue
-            if entry.is_file():
+            kind = _entry_kind(entry)
+            if kind == "file":
                 if entry.name in EXCLUDE_PATTERNS:
                     continue
                 suffix = os.path.splitext(entry.name)[1].lower()
@@ -259,11 +312,14 @@ def _take_inventory(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> _
                     inventory.durable.add(suffix)
                 if owned:
                     inventory.owned.append(dir_path / entry.name)
-            elif entry.is_dir():
-                still_owned = owned and not (
-                    entry.name == "site" or should_skip_directory(entry.name)
-                )
-                scan(dir_path / entry.name, depth + 1, still_owned)
+            elif kind == "dir":
+                if entry.name == "site" or should_skip_directory(entry.name):
+                    continue
+                child = dir_path / entry.name
+                if depth + 1 <= max_depth:
+                    scan(child, depth + 1, owned)
+                elif owned and _worth_reporting(child):
+                    inventory.unscanned.append(child)
 
     scan(path, 0, owned=True)
     return inventory
@@ -281,11 +337,13 @@ def _nonempty(path: Path) -> bool:
         return False
 
 
-def find_warnings(root: Path, files: list[Path]) -> list[ComplianceWarning]:
+def find_warnings(
+    root: Path, files: list[Path], unscanned: Sequence[Path] = ()
+) -> list[ComplianceWarning]:
     """Warn about owned files a future reader may be unable to open or may lose.
 
-    A file outside the registry is only a problem when it is not plain text
-    either: a text editor opens a .py or a LICENSE as well as it opens a .txt.
+    A file outside the format list is only a problem when it is not UTF-8
+    text either: a text editor opens a .py or a LICENSE as well as a .txt.
     """
     warnings: list[ComplianceWarning] = []
     unrecognized: dict[str, list[Path]] = defaultdict(list)
@@ -294,27 +352,39 @@ def find_warnings(root: Path, files: list[Path]) -> list[ComplianceWarning]:
         paired = sidecar_base(f)
         if paired is not None:
             base, sidecar = paired
-            if sidecar.risk and _nonempty(f):
-                risk = sidecar.risk.replace("<db>", base.relative_to(root).as_posix())
+            risk = sidecar.describe_risk(base.relative_to(root).as_posix())
+            if risk and _nonempty(f):
                 warnings.append(ComplianceWarning(
                     kind=WarningKind.SIDECAR_AT_RISK,
                     message=f"{f.relative_to(root).as_posix()} {risk}",
                     paths=[f],
                 ))
-        elif format_for(f) is None and not reads_as_text(f):
+        elif is_unrecognized(f):
             unrecognized[f.suffix.lower()].append(f)
 
     for suffix in sorted(unrecognized):
         paths = unrecognized[suffix]
-        count = f"{len(paths)} file{'s' if len(paths) != 1 else ''}"
-        what = f"in {suffix}" if suffix else "with no extension"
-        what += ": not a recognized durable format, and not plain text"
+        where = f"in {suffix}" if suffix else "with no extension"
         warnings.append(ComplianceWarning(
             kind=WarningKind.UNRECOGNIZED_FORMAT,
-            message=f"{count} {what}",
+            message=f"{_count(len(paths), 'file')} {where}: "
+                    "not in a durable format, and not UTF-8 text",
             paths=paths,
         ))
+
+    if unscanned:
+        warnings.append(ComplianceWarning(
+            kind=WarningKind.NOT_INSPECTED,
+            message=f"{_count(len(unscanned), 'directory', 'directories')} more than "
+                    f"{DEFAULT_FORMAT_SCAN_DEPTH} levels down not inspected: their files "
+                    "are not checked or listed (give them a README to make them sources)",
+            paths=list(unscanned),
+        ))
     return warnings
+
+
+def _count(n: int, singular: str, plural: Optional[str] = None) -> str:
+    return f"{n} {singular if n == 1 else (plural or singular + 's')}"
 
 
 def is_durable_format(extension: str) -> bool:
@@ -355,14 +425,14 @@ def check_compliance(path: Path) -> ComplianceResult:
 
     inventory = _take_inventory(path)
     durable = sorted(inventory.durable)
-    warnings = find_warnings(path, inventory.owned)
 
     if not durable:
         return ComplianceResult(
             compliant=False,
             path=path,
             reason="No durable data formats found",
-            warnings=warnings,
+            files=inventory.owned,
+            unscanned=inventory.unscanned,
         )
 
     readme = parse_readme(readme_file)
@@ -393,6 +463,13 @@ def check_compliance(path: Path) -> ComplianceResult:
         frontmatter=frontmatter,
         contents=contents,
         files=inventory.owned,
+        unscanned=inventory.unscanned,
     )
 
-    return ComplianceResult(compliant=True, path=path, source=source, warnings=warnings)
+    return ComplianceResult(
+        compliant=True,
+        path=path,
+        source=source,
+        files=inventory.owned,
+        unscanned=inventory.unscanned,
+    )

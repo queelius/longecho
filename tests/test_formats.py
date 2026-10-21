@@ -160,3 +160,41 @@ def test_docs_list_every_extension(doc):
     text = path.read_text(encoding="utf-8")
     missing = [ext for ext in sorted(DURABLE_EXTENSIONS) if f"`{ext}`" not in text]
     assert not missing, f"{doc} is missing {missing}"
+
+
+class TestMimetypes:
+    """arkiv records carry a mimetype; longecho answers whether it is durable."""
+
+    def test_canonical_and_alias_types(self):
+        from longecho.formats import is_durable_mimetype
+
+        assert is_durable_mimetype("audio/wav")
+        assert is_durable_mimetype("audio/x-wav")
+        assert is_durable_mimetype("application/x-ndjson")
+        assert is_durable_mimetype("audio/ogg")  # Ogg Opus files, RFC 7845
+
+    def test_case_and_parameters_are_ignored(self):
+        from longecho.formats import is_durable_mimetype
+
+        assert is_durable_mimetype("Text/Plain; charset=utf-8")
+
+    def test_not_durable(self):
+        from longecho.formats import is_durable_mimetype
+
+        assert not is_durable_mimetype("image/heic")
+        assert not is_durable_mimetype(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+
+    def test_aliases_never_shadow_another_format(self):
+        canonical = {f.mimetype for f in FORMATS}
+        for fmt in FORMATS:
+            for alias in fmt.mimetype_aliases:
+                assert alias not in canonical, alias
+                assert alias == alias.lower()
+
+
+def test_module_docstring_does_not_claim_content_blindness():
+    import longecho.formats as formats
+
+    assert "never reads file contents" not in " ".join((formats.__doc__ or "").split())

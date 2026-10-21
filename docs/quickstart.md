@@ -34,7 +34,7 @@ If the check fails, you are usually one step away. Do two things:
 
 If the directory is the top of a whole archive, make its README the note you would want a stranger to find first: what this is, whose it is, and how to open each kind of file inside.
 
-`check` also prints warnings when it sees files that are neither in a recognized format nor plain text, or a SQLite database whose latest changes still sit in a `-wal` file beside it. Warnings do not fail the check; they tell you what a future reader might not be able to open, or might not get.
+`check` also prints warnings when it sees files that are neither in a durable format nor UTF-8 text, a SQLite database whose latest changes still sit in a `-wal` or `-journal` file beside it, or directories nested too deep for it to look into. Warnings do not fail the check; they tell you what a future reader might not be able to open, or might not get.
 
 See the [Specification](spec.md) for the full format list and the README conventions, including the optional `contents` frontmatter field.
 

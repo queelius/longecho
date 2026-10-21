@@ -340,9 +340,9 @@
             }
         }
 
-        // One row per data file: a link, a flag when the format is neither
-        // recognized nor plain text, and an inline preview when the browser can
-        // show the file itself (the build decides which, from the registry).
+        // One row per data file: a link, a flag when check would warn about it
+        // (the build decides), and an inline preview when the browser can
+        // show the file itself (also decided by the build, from the format list).
         function createFileEntry(f) {
             var entry = document.createElement('div');
             entry.className = 'file-entry';
@@ -353,10 +353,10 @@
             a.textContent = f.name;
             entry.appendChild(a);
 
-            if (f.durable === false && !f.plain_text) {
+            if (f.warns) {
                 var flag = document.createElement('span');
                 flag.className = 'file-flag';
-                flag.textContent = 'not a recognized format or plain text';
+                flag.textContent = 'not in a durable format, and not UTF-8 text';
                 entry.appendChild(flag);
             }
 

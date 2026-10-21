@@ -1,8 +1,8 @@
-"""The durable format registry.
+"""The durable format list.
 
-Which formats count as durable is a judgment, not a capability: longecho never
-reads file contents, so there is nothing per format to plug in. The registry
-records that judgment as data. Each entry says why the format qualifies,
+Which formats count as durable is a judgment, not a capability: compliance
+looks at file names, not contents, so there is nothing per format to plug in.
+The list records that judgment as data. Each entry says why the format qualifies,
 measured against the Library of Congress sustainability factors below, and
 which readers can open it, which is what ties a format to a rung of the
 graceful-degradation ladder.
@@ -10,6 +10,10 @@ graceful-degradation ladder.
 Everything else (the flat extension set, the category view, inline previews in
 the generated site, the ``formats`` and ``spec`` output) is derived from
 ``FORMATS``. Adding a format means adding one entry with its reasons.
+
+The one place this module reads inside a data file is ``reads_as_text``, which
+peeks at the first few KB of a file whose extension is not on the list, to
+tell plain text from binary for warnings. Compliance never uses it.
 """
 
 import codecs
@@ -62,16 +66,27 @@ class Sidecar:
     """A companion file a format's own software writes next to it.
 
     ``risk`` explains what is lost when the main file is copied without this
-    one; ``None`` means the sidecar is transient and safe to leave behind.
+    one, as a ``str.format`` template with a ``{db}`` field for the main file's
+    path; ``None`` means the sidecar is transient and safe to leave behind.
     """
 
     suffix: str
     risk: Optional[str] = None
 
+    def describe_risk(self, db: str) -> Optional[str]:
+        """The risk text for a specific main file, or None if there is none."""
+        return self.risk.format(db=db) if self.risk else None
+
 
 @dataclass(frozen=True)
 class Format:
-    """One durable format and the reasons it qualifies."""
+    """One durable format and the reasons it qualifies.
+
+    ``mimetype`` is the registered (or best established) media type;
+    ``mimetype_aliases`` are other spellings seen in the wild, such as the
+    ``x-`` types Python's ``mimetypes`` returns, so a tool that records
+    mimetypes can ask ``is_durable_mimetype`` without normalizing first.
+    """
 
     extensions: tuple[str, ...]
     mimetype: str
@@ -79,6 +94,7 @@ class Format:
     readers: frozenset[Reader]
     rationale: str
     sidecars: tuple[Sidecar, ...] = ()
+    mimetype_aliases: tuple[str, ...] = ()
 
 
 _TEXT = frozenset({Reader.TEXT_EDITOR})
@@ -91,7 +107,7 @@ _SQLITE_SIDECARS = (
         "-wal",
         "may hold committed changes that are not yet in the database file; copy "
         "both together, or checkpoint first with "
-        "sqlite3 <db> 'PRAGMA wal_checkpoint(TRUNCATE)'",
+        "sqlite3 {db} 'PRAGMA wal_checkpoint(TRUNCATE)'",
     ),
     Sidecar(
         "-journal",
@@ -109,6 +125,7 @@ FORMATS: tuple[Format, ...] = (
         "SQLite: public-domain code, a documented and stable file format, a "
         "Library of Congress recommended format for datasets.",
         sidecars=_SQLITE_SIDECARS,
+        mimetype_aliases=("application/x-sqlite3", "application/vnd.sqlite"),
     ),
     Format(
         (".json",), "application/json", "Structured data", _TEXT_AND_BROWSER,
@@ -118,10 +135,14 @@ FORMATS: tuple[Format, ...] = (
         (".jsonl",), "application/jsonl", "Structured data", _TEXT,
         "JSON Lines: one JSON value per line, so it survives truncation and "
         "streams through grep and line tools.",
+        mimetype_aliases=("application/x-ndjson", "application/jsonlines",
+                          "application/x-jsonlines"),
     ),
     Format(
         (".md", ".markdown"), "text/markdown", "Documents", _TEXT,
-        "Markdown: RFC 7763, plain text that reads well even unrendered.",
+        "Markdown: plain text that reads well even unrendered; CommonMark "
+        "specifies the syntax and RFC 7763 registers the media type.",
+        mimetype_aliases=("text/x-markdown",),
     ),
     Format(
         (".txt", ".text"), "text/plain", "Documents", _TEXT_AND_BROWSER,
@@ -147,7 +168,8 @@ FORMATS: tuple[Format, ...] = (
     ),
     Format(
         (".eml",), "message/rfc822", "Mail", _TEXT,
-        "Email message: RFC 5322 plain text, headers and body readable as is.",
+        "Email message: RFC 5322 text. Headers and plain bodies read as is; "
+        "attachments are base64 text that any MIME library decodes.",
     ),
     Format(
         (".mbox",), "application/mbox", "Mail", _TEXT,
@@ -164,14 +186,17 @@ FORMATS: tuple[Format, ...] = (
     Format(
         (".xml",), "application/xml", "Tabular / data", _TEXT_AND_BROWSER,
         "XML: a W3C standard, plain text, with parsers everywhere.",
+        mimetype_aliases=("text/xml",),
     ),
     Format(
         (".yaml", ".yml"), "application/yaml", "Tabular / data", _TEXT,
         "YAML: a published spec (RFC 9512 media type), plain text.",
+        mimetype_aliases=("text/yaml", "text/x-yaml", "application/x-yaml"),
     ),
     Format(
         (".jpg", ".jpeg"), "image/jpeg", "Images", _BROWSER_AND_TOOL,
         "JPEG: ISO/IEC 10918, decoded by every device made in 30 years.",
+        mimetype_aliases=("image/jpg", "image/pjpeg"),
     ),
     Format(
         (".png",), "image/png", "Images", _BROWSER_AND_TOOL,
@@ -193,34 +218,41 @@ FORMATS: tuple[Format, ...] = (
     Format(
         (".tif", ".tiff"), "image/tiff", "Images", _TOOL,
         "TIFF: a published spec (TIFF 6.0) and the archival standard for "
-        "scans; OS image viewers open it, though most browsers do not.",
+        "scans; OS image viewers open it, but only Safari among browsers.",
     ),
     Format(
         (".wav",), "audio/wav", "Audio", _BROWSER_AND_TOOL,
-        "WAV: uncompressed PCM in a documented RIFF container, the simplest "
-        "audio there is.",
+        "WAV: a documented RIFF container, almost always holding uncompressed "
+        "PCM, the simplest audio there is.",
+        mimetype_aliases=("audio/x-wav", "audio/wave", "audio/vnd.wave"),
     ),
     Format(
         (".flac",), "audio/flac", "Audio", _BROWSER_AND_TOOL,
         "FLAC: RFC 9639, lossless and royalty-free.",
+        mimetype_aliases=("audio/x-flac",),
     ),
     Format(
         (".mp3",), "audio/mpeg", "Audio", _BROWSER_AND_TOOL,
         "MP3: ISO/IEC 11172-3, the most widely decoded audio format; its "
         "patents expired in 2017.",
+        mimetype_aliases=("audio/mp3",),
     ),
     Format(
         (".ogg",), "audio/ogg", "Audio", _BROWSER_AND_TOOL,
         "Ogg: RFC 3533 container, usually Vorbis audio, royalty-free.",
     ),
     Format(
-        (".opus",), "audio/opus", "Audio", _BROWSER_AND_TOOL,
-        "Opus: RFC 6716, royalty-free, the IETF's audio codec.",
+        (".opus",), "audio/ogg", "Audio", _BROWSER_AND_TOOL,
+        "Opus: RFC 6716, royalty-free, the IETF's audio codec, stored in Ogg "
+        "(RFC 7845, which gives Ogg Opus files the audio/ogg type).",
+        mimetype_aliases=("audio/opus",),
     ),
     Format(
         (".mp4",), "video/mp4", "Video", _BROWSER_AND_TOOL,
-        "MP4: ISO/IEC 14496-14. Its usual codecs carry patents, but every "
-        "browser and OS decodes it, so on balance it is the safest video.",
+        "MP4: ISO/IEC 14496-14. With H.264 video and AAC audio, which carry "
+        "patents but which every browser and OS decodes, it is on balance the "
+        "safest video. An .mp4 holding HEVC does not play everywhere; longecho "
+        "judges the container, so re-encode such files to H.264.",
     ),
     Format(
         (".webm",), "video/webm", "Video", _BROWSER_AND_TOOL,
@@ -230,15 +262,18 @@ FORMATS: tuple[Format, ...] = (
         (".zip",), "application/zip", "Archives", _TOOL,
         "ZIP: a public spec since 1989 (ISO/IEC 21320-1 for its document "
         "subset); every OS unpacks it.",
+        mimetype_aliases=("application/x-zip-compressed",),
     ),
     Format(
         (".gz",), "application/gzip", "Archives", _TOOL,
         "gzip: RFC 1952, decoded by every OS since the 1990s. Compounds such "
         "as .jsonl.gz and .tar.gz qualify through this suffix.",
+        mimetype_aliases=("application/x-gzip",),
     ),
     Format(
         (".tgz",), "application/gzip", "Archives", _TOOL,
         "The compact spelling of .tar.gz: a POSIX tar archive, gzipped.",
+        mimetype_aliases=("application/x-compressed-tar", "application/x-gtar"),
     ),
 )
 
@@ -248,6 +283,10 @@ FORMAT_BY_EXTENSION: dict[str, Format] = {
 }
 
 DURABLE_EXTENSIONS: set[str] = set(FORMAT_BY_EXTENSION)
+
+DURABLE_MIMETYPES: set[str] = {
+    mt for fmt in FORMATS for mt in (fmt.mimetype, *fmt.mimetype_aliases)
+}
 
 DURABLE_FORMAT_CATEGORIES: dict[str, list[str]] = {}
 for _fmt in FORMATS:
@@ -261,6 +300,11 @@ _PREVIEWABLE: tuple[PreviewKind, ...] = ("image", "audio", "video")
 def format_for(path: Path) -> Optional[Format]:
     """The registry entry for a file, by its terminal suffix, or None."""
     return FORMAT_BY_EXTENSION.get(path.suffix.lower())
+
+
+def is_durable_mimetype(mimetype: str) -> bool:
+    """Whether a media type (any case, parameters allowed) names a durable format."""
+    return mimetype.split(";", 1)[0].strip().lower() in DURABLE_MIMETYPES
 
 
 def preview_kind(path: Path) -> Optional[PreviewKind]:
@@ -304,6 +348,11 @@ def reads_as_text(path: Path, sample: int = TEXT_SAMPLE_BYTES) -> bool:
     except UnicodeDecodeError:
         return False
     return True
+
+
+def is_unrecognized(path: Path) -> bool:
+    """Neither in a durable format nor UTF-8 text: a file to warn about."""
+    return format_for(path) is None and not reads_as_text(path)
 
 
 def sidecar_base(path: Path) -> Optional[tuple[Path, Sidecar]]:

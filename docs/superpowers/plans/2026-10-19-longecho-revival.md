@@ -146,6 +146,16 @@ Today `_is_foreign_site` returns "not foreign" when the output has no README or 
 - [x] SQLite sidecars come from the registry (`Format.sidecars`): a non-empty `-wal` or `-journal` warns, `-shm` never does.
 - [x] `check` prints warnings (`--verbose` names the files); `query --json` adds `warnings` when present.
 
+### Task C5: Pre-release review of 0.6.0 (done 2026-10-21)
+
+Code, spec, and ethos reviews ran before the 0.6.0 release. Fixed: crashes on symlink loops and unreadable symlink targets; unencoded hrefs (including a `javascript:` scheme when the output is the archive root); Rich markup in filenames; the regex README sanitizer (replaced by an `HTMLParser` allowlist); `--output` at or above the archive overwriting its README; a custom `--output` becoming a sub-source on rebuild; symlinked sources outside the archive getting relative links; durable files in `site/` or `node_modules` making a directory compliant; lowercase `readme.md` counting as data; warnings reading file contents during plain `query`; mimetype aliases for arkiv; docs claiming "every file" and "nothing is hidden" past the scan depth (now a `not-inspected` warning); stale and overstated rationale text.
+
+Deferred, not blocking:
+- [ ] A subdirectory with its own README that is not compliant (say, a README and a `.docx`) is skipped by the parent's file list and by `build`, and the parent does not mention it. Consider a parent-level warning naming such directories.
+- [ ] `build` auto-discovery looks only at direct children, so a source under a README-less directory (`a/b/README.md`) never appears in the site, though `query` finds it.
+- [ ] On case-insensitive filesystems, `find_readme` matches `Readme.md` but the walk's exact-name check does not, so a parent can list a child's files too.
+- [ ] `-v` is `--version` and `-V` is `--verbose`; consider dropping `-v`.
+
 ### Task C4: Fixity
 
 Detects bit rot over time. Separate from compliance: `check` does not change.

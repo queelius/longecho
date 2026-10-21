@@ -9,22 +9,25 @@ For how to run the commands, see [CLI reference](cli.md). For a gentle walkthrou
 A directory is longecho-compliant if and only if it has both of these:
 
 1. A root `README.md` or `README.txt` explaining what the data is.
-2. At least one file in a durable format.
+2. At least one file in a durable format, no more than two directory levels below that README.
 
 That's it. No special files, no schema, no version numbers.
 
+A few things do not count as data. The README itself does not (nor its lowercase spellings `readme.md` and `readme.txt`, which longecho also accepts as the README), and neither do a handful of files that describe a code project rather than hold data: `CLAUDE.md`, `CHANGELOG.md`, `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements.txt`, `.gitignore`, `.gitattributes`. Hidden files and folders (names starting with a dot) are skipped. So are `site/`, which is a view of the data rather than the data, and tool folders such as `node_modules`, `__pycache__`, `venv`, `dist`, and `build`. Durable files inside nested sources do count, so an archive whose data lives entirely in its sub-sources is compliant; this is also why a source's reported formats include its children's.
+
 Compliance checks **presence, not validity**. The tool confirms that a README exists and that at least one durable file exists. It does not parse, validate, or otherwise judge the contents of those files. An empty durable file still satisfies the rule: a zero-byte `data.jsonl` counts. Validity is a moving target that depends on tools and intent, while presence is something a future reader can verify with nothing but a file listing.
 
-When a check fails, `longecho check` returns a human-readable reason, not just a boolean. You will see one of "No README.md or README.txt found", "No durable data formats found", "Path does not exist", or "Path is not a directory". The reason tells you exactly what to fix.
+When a check fails, `longecho check` returns a human-readable reason, not just a boolean: "No README.md or README.txt found" or "No durable data formats found" (the Python API can also report "Path does not exist" and "Path is not a directory"). The reason tells you exactly what to fix.
 
 ## Warnings
 
 A check can also return warnings. They point at things a future reader might be unable to open, or might never receive, but they never change the verdict: a compliant directory with warnings is still compliant.
 
-- **Unrecognized formats.** Files the source owns that are neither in a durable format nor plain text (a `.heic` photo, a `.docx` letter, a compiled program) are counted and grouped by extension. A file with an extension longecho does not know but whose content is UTF-8 text (a `.py` script, a `.tex` paper, a `LICENSE`) does not warn, because a text editor opens it. To tell the two apart, longecho reads the first 4 KB of each such file; this is the only time it looks inside a file, and it never affects the verdict. Nothing is hidden: the generated site lists every file, and marks the ones that warn.
+- **Unrecognized formats.** Files the source owns that are neither in a durable format nor UTF-8 text (a `.heic` photo, a `.docx` letter, a compiled program) are counted and grouped by extension. A file with an extension longecho does not know but whose content is UTF-8 text (a `.py` script, a `.tex` paper, a `LICENSE`) does not warn, because a text editor opens it. Text in an older encoding (Latin-1, UTF-16) does warn; converting it to UTF-8 is the durable choice. To tell text from binary, longecho reads the first 4 KB of each such file. This is the only time it reads inside a data file, it happens only when warnings are shown, and it never affects the verdict.
+- **Directories not inspected.** longecho looks two levels below a source's README and no further. Directories deeper than that, which are not sources of their own, are named in one warning, because their files are neither checked nor listed in the site. Give such a directory its own README, or keep data closer to the top.
 - **SQLite sidecars at risk.** A SQLite database in write-ahead-log mode keeps recent changes in a `-wal` file next to it. Copy the `.db` alone and those changes may be lost. A non-empty `-wal`, or a leftover `-journal` from an interrupted write, raises a warning that says how to fold it back in. The `-shm` file is transient and never warns.
 
-Warnings cover only the files a source owns, so a nested source's warnings show up when you check that source, not its parent.
+Warnings cover only the files a source owns, so a nested source's warnings show up when you check that source, not its parent. `longecho check` prints them once it has found a README; `longecho query --json` includes them for each source that has any.
 
 ## Durable formats
 
@@ -61,7 +64,7 @@ Each format in the list records three things: its media type, a one-line reason 
 
 Run `longecho formats` to see every format with its readers and its reason, or `longecho formats --json` for the same list as data. The list is one table in the code, and everything else (this check, the `spec` summary, the site's previews) is derived from it. Adding a format means adding one entry and writing down why it qualifies.
 
-Some formats were left out on purpose. HEIC is patent-encumbered and not decoded everywhere (most browsers cannot show it, and Windows needs an add-on). `.docx` and the other office formats are published standards, but faithful rendering still depends on one vendor's software. Keep them if you have them, but also keep a copy in a listed format (JPEG or PNG for photos, PDF or Markdown for documents) if you want a future reader to be able to open it.
+Some formats were left out on purpose. The deciding factor is usually adoption: whether a reader you did not choose can open the file. MP4 is on the list despite its patented codecs because H.264 and AAC are decoded by every browser and OS; HEIC is off because, patents aside, most browsers cannot show it and Windows needs an add-on. The same goes for `.mov`, which phones often record. `.docx` and the other office formats are published standards, but faithful rendering still depends on one vendor's software. Keep such files if you have them, and also keep a copy in a listed format (JPEG or PNG for photos, H.264 MP4 for video, PDF or Markdown for documents) if you want a future reader to be able to open it.
 
 **Terminal-suffix rule.** Format detection looks at the last extension only. A compound name like `conversations.jsonl.gz` or `backup.tar.gz` qualifies via its terminal `.gz`, not via `.jsonl.gz` or `.tar.gz`. The `.tgz` form is the compact tar-gzip spelling and qualifies directly. One consequence: a source's reported `durable_formats` lumps every `*.gz` file under `.gz` regardless of what is inside.
 
@@ -75,13 +78,13 @@ A README may begin with optional YAML frontmatter for structured metadata. With 
 
 The **name cascade** is: frontmatter `name`, then the first level-one (`#`) heading, then the directory name.
 
-The **description cascade** is: frontmatter `description`, then the first paragraph after the heading.
+The **description cascade** is: frontmatter `description`, then the first paragraph of the README.
 
 Identity always comes from a source's own README. A parent never overrides a child's name or description. This is what keeps fragments legible: pull any subdirectory out of the tree and it still explains itself.
 
 ### The top-level README
 
-The README at the top of a whole archive (the root of a drive, or of the folder you would hand to someone) is where a reader with no context starts. There is no separate "start here" file: this README is that file. Write it for someone who has none of your tools and does not know you made them. Say what the archive is, who it belongs to, and how to open each kind of file in it, down to the plainest option. If you would rather not assume the reader knows Markdown, name it `README.txt`.
+The README at the top of a whole archive (the root of a drive, or of the folder you would hand to someone) is where a reader with no context starts. There is no separate "start here" file: this README is that file. Write it for someone who has none of your tools and does not know you made them. Say what the archive is, who it belongs to, and how to open each kind of file in it, down to the plainest option. If you would rather not assume the reader knows Markdown, name it `README.txt`. Then test what you wrote: open the plain-text copies in a text editor, run one query with `sqlite3`, open the site straight from the folder. A fallback nobody has tried is a guess.
 
 ## The contents field
 
@@ -96,12 +99,12 @@ Without a `contents` field, sub-source discovery is automatic: every longecho-co
 
 A longecho source can contain other longecho sources, and the structure is the same at every level. Each directory is a self-describing source with its own README. Archives may nest arbitrarily.
 
-Data files are source-scoped. Each source owns the files it directly contains, durable or not. When the tool gathers a source's files it walks down but stops at any nested source, `site/` directory, or tool directory (such as `node_modules`), so a child's files belong to the child's detail view, not the parent's.
+Data files are source-scoped. Each source owns the files it directly contains, durable or not, down to two levels below its README. When the tool gathers a source's files it walks down but stops at any nested source, `site/` directory, or tool directory (such as `node_modules`), so a child's files belong to the child's detail view, not the parent's.
 
 ## The site convention
 
-`longecho build` emits a single self-contained `site/index.html`: a single-file application with all content, CSS, and JavaScript inlined. README content and metadata are embedded as JSON, and client-side JavaScript handles navigation and search. Actual data files are linked by relative path so the browser can open or download them. Images, audio, and video that a browser can play are previewed inline (lazily, so a large photo folder does not load all at once); which formats preview is derived from the format list. Files that are neither in a recognized format nor plain text are listed and marked rather than left out. Because everything is inlined or relative, the site works from `file://` with no server.
+`longecho build` emits a single self-contained `site/index.html`: a single-file application with all content, CSS, and JavaScript inlined. README content and metadata are embedded as JSON, and client-side JavaScript handles navigation and search. Actual data files are linked by relative, percent-encoded path so the browser can open or download them; if you write the site outside the archive with `--output`, or a source is a symlink to somewhere else, those links are absolute `file://` URIs instead. Images, audio, and video that a browser can play are previewed inline with the browser's own elements (lazily, so a large photo folder does not load all at once): no decoders, no generated thumbnails. Which formats preview is derived from the format list. Each source's file list shows the files it owns, minus SQLite sidecars, and marks the ones `check` warns about. Because everything is inlined or relative, the site works from `file://` with no server.
 
 The generated `site/` directory is itself longecho-compliant: longecho writes it a `README.md` with frontmatter, so it appears in query results like any other source.
 
-The build overwrites a non-empty `site/` only when its `README.md` carries a `generator` field beginning with "longecho build", meaning longecho made it. Any other `site/` (another tool's stamp, or a viewer with no README at all) stops the build, which tells you who owns it. Pass `--force` to overwrite anyway. Tools that write a viewer into `site/` should stamp it with `generator: <tool> <version>`.
+The build overwrites a non-empty `site/` only when its `README.md` carries a `generator` field beginning with "longecho build", meaning longecho made it. Any other `site/` (another tool's stamp, or a viewer with no README at all) stops the build, which tells you who owns it. Pass `--force` to overwrite anyway. Tools that write a viewer into `site/` should stamp it with `generator: <tool> <version>`. The build never writes into the archive directory itself or a directory that contains it, `--force` or not, since that would replace a README someone wrote. A directory stamped by an earlier `longecho build --output` is a view, so later builds do not treat it as a sub-source.

@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from longecho.checker import (
     DURABLE_EXTENSIONS,
     DURABLE_FORMAT_CATEGORIES,
@@ -541,3 +543,128 @@ class TestNewlyDurableFormats:
         result = check_compliance(temp_dir)
         assert result.compliant
         assert result.source is not None and result.source.durable_formats == [".pdf"]
+
+
+class TestWalkRobustness:
+    """Odd filesystem entries never crash a check (review findings, 0.6.0)."""
+
+    def _archive(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        return temp_dir
+
+    def test_symlink_loop(self, temp_dir):
+        import os
+
+        self._archive(temp_dir)
+        os.symlink("loop", temp_dir / "loop")
+        result = check_compliance(temp_dir)
+        assert result.compliant
+        assert result.warnings == []
+
+    def test_symlink_into_unreadable_directory(self, temp_dir):
+        import os
+
+        if os.geteuid() == 0:
+            pytest.skip("root can read everything")
+        self._archive(temp_dir)
+        locked = temp_dir / "locked"
+        locked.mkdir()
+        (locked / "f").write_text("x")
+        os.symlink(locked / "f", temp_dir / "link")
+        locked.chmod(0)
+        try:
+            result = check_compliance(temp_dir)
+            assert result.compliant
+        finally:
+            locked.chmod(0o755)
+
+    def test_broken_symlink_is_ignored(self, temp_dir):
+        import os
+
+        self._archive(temp_dir)
+        os.symlink(temp_dir / "missing", temp_dir / "dangling")
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert [p.name for p in result.source.files] == ["a.json"]
+
+
+class TestWhatCountsAsData:
+    def test_lowercase_readme_is_not_its_own_data(self, temp_dir):
+        (temp_dir / "readme.md").write_text("# T\n\nOnly a readme.")
+        result = check_compliance(temp_dir)
+        assert not result.compliant
+        assert result.reason == "No durable data formats found"
+
+    def test_durable_files_only_in_site_do_not_count(self, temp_dir):
+        """A viewer is not the data: raw data must exist alongside site/."""
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "site").mkdir()
+        (temp_dir / "site" / "index.html").write_text("<html></html>")
+        assert not check_compliance(temp_dir).compliant
+
+    def test_durable_files_only_in_tool_directories_do_not_count(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "node_modules").mkdir()
+        (temp_dir / "node_modules" / "package.json").write_text("{}")
+        assert not check_compliance(temp_dir).compliant
+
+    def test_data_in_nested_sources_still_counts(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Root\n\nRoot.")
+        sub = temp_dir / "sub"
+        sub.mkdir()
+        (sub / "README.md").write_text("# Sub\n\nSub.")
+        (sub / "x.json").write_text("{}")
+        assert check_compliance(temp_dir).compliant
+
+
+class TestNotInspectedWarning:
+    """Directories beyond the scan depth are named, not silently skipped."""
+
+    def test_deep_directories_are_reported(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "notes.txt").write_text("hi")
+        deep = temp_dir / "photos" / "2020" / "01"
+        deep.mkdir(parents=True)
+        (deep / "a.jpg").write_bytes(BINARY)
+        result = check_compliance(temp_dir)
+        kinds = [w.kind for w in result.warnings]
+        assert kinds == [WarningKind.NOT_INSPECTED]
+        assert result.warnings[0].paths == [deep]
+
+    def test_empty_or_nested_source_dirs_at_the_boundary_are_quiet(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "notes.txt").write_text("hi")
+        (temp_dir / "a" / "b" / "empty").mkdir(parents=True)
+        nested = temp_dir / "a" / "b" / "src"
+        nested.mkdir()
+        (nested / "README.md").write_text("# S\n\nS.")
+        (nested / "x.json").write_text("{}")
+        assert check_compliance(temp_dir).warnings == []
+
+
+class TestWarningMessages:
+    def test_message_says_utf8(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "b.heic").write_bytes(BINARY)
+        message = check_compliance(temp_dir).warnings[0].message
+        assert message == "1 file in .heic: not in a durable format, and not UTF-8 text"
+
+
+class TestWarningsAreLazy:
+    """Walking a tree must not read file contents nobody will look at."""
+
+    def test_discovery_reads_no_file_contents(self, temp_dir, monkeypatch):
+        import longecho.formats as formats
+        from longecho.discovery import discover_sources
+
+        calls = []
+        monkeypatch.setattr(formats, "reads_as_text", lambda p: calls.append(p) or False)
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "b.heic").write_bytes(BINARY)
+        sources = list(discover_sources(temp_dir))
+        assert len(sources) == 1 and calls == []
+        assert len(sources[0].warnings) == 1  # computed on first access
+        assert len(calls) == 1

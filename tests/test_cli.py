@@ -92,6 +92,49 @@ class TestCheckWarnings:
         assert "warnings" not in by_path["./clean"]
 
 
+class TestUntrustedTextIsPrintedLiterally:
+    """Filenames and README text are data, never Rich markup."""
+
+    def test_markup_in_filenames(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "[red]secret.bin").write_bytes(b"\x00\xff")
+        result = runner.invoke(app, ["check", str(temp_dir), "-V"])
+        assert result.exit_code == 0
+        assert "[red]secret.bin" in result.stdout
+
+    def test_unbalanced_markup_does_not_crash(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "[").mkdir()
+        (temp_dir / "[" / "b]").write_bytes(b"\x00\xff")
+        result = runner.invoke(app, ["check", str(temp_dir), "-V"])
+        assert result.exit_code == 0, result.output
+        assert "[/b]" in result.stdout
+
+    def test_markup_in_names_and_descriptions(self, temp_dir):
+        (temp_dir / "README.md").write_text("# [bold]Loud[/bold]\n\nA [link] here.")
+        (temp_dir / "a.json").write_text("{}")
+        result = runner.invoke(app, ["query", str(temp_dir)])
+        assert "[bold]Loud[/bold]" in result.stdout
+        assert "A [link] here." in result.stdout
+
+
+class TestVerboseReaders:
+    def test_lists_the_readers_that_can_open_the_data(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.db").write_bytes(b"x")
+        result = runner.invoke(app, ["check", str(temp_dir), "-V"])
+        assert "Readable with: standard tool" in result.stdout
+
+    def test_union_in_ladder_order(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.db").write_bytes(b"x")
+        (temp_dir / "b.json").write_text("{}")
+        result = runner.invoke(app, ["check", str(temp_dir), "-V"])
+        assert "Readable with: standard tool, web browser, text editor" in result.stdout
+
+
 class TestQueryCommand:
     """Tests for the query command."""
 
@@ -192,6 +235,18 @@ class TestSpecCommand:
         for category in DURABLE_FORMAT_CATEGORIES:
             assert category in result.stdout
 
+    def test_spec_fits_80_columns(self):
+        from longecho.cli import _format_spec
+
+        assert max(len(line) for line in _format_spec().splitlines()) <= 80
+
+    def test_spec_mentions_warnings_and_description_cascade(self):
+        from longecho.cli import _format_spec
+
+        text = _format_spec()
+        assert "Warnings" in text
+        assert "Description cascade" in text
+
     def test_spec_includes_principles(self):
         result = runner.invoke(app, ["spec"])
 
@@ -245,6 +300,8 @@ class TestFormatsCommand:
         assert pdf["category"] == "Documents"
         assert sorted(pdf["readers"]) == ["standard tool", "web browser"]
         assert pdf["rationale"]
+        wav = next(e for e in entries if ".wav" in e["extensions"])
+        assert "audio/x-wav" in wav["mimetype_aliases"]
 
 
 class TestVersionFlag:

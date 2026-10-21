@@ -594,6 +594,38 @@ class TestLinksResolveFromThePage:
         assert result.success and result.output_path is not None
         self._assert_links_resolve(result.output_path, self._root_data(result.output_path))
 
+    def test_hrefs_are_url_encoded(self, temp_dir):
+        from urllib.parse import unquote
+
+        (temp_dir / "README.md").write_text("# Root\n\nRoot.")
+        for name in ("a #1.png", "q?.json", "100%25.txt", "javascript:x.txt"):
+            (temp_dir / name).write_text("x")
+        result = build_site(temp_dir)
+        assert result.success and result.output_path is not None
+        data = self._root_data(result.output_path)
+        by_name = {f["name"]: f["path"] for f in data["data_files"]}
+        assert by_name["a #1.png"] == "../a%20%231.png"
+        assert by_name["javascript:x.txt"] == "../javascript%3Ax.txt"
+        for name, href in by_name.items():
+            assert (result.output_path / unquote(href)).resolve() == (temp_dir / name).resolve()
+
+    def test_symlinked_child_outside_the_archive_uses_file_uri(self, temp_dir):
+        import os
+
+        archive = temp_dir / "archive"
+        archive.mkdir()
+        (archive / "README.md").write_text("# Root\n\nRoot.")
+        (archive / "top.json").write_text("{}")
+        ext = temp_dir / "ext"
+        ext.mkdir()
+        (ext / "README.md").write_text("# Ext\n\nElsewhere.")
+        (ext / "a.png").write_bytes(b"png")
+        os.symlink(ext, archive / "photos")
+        result = build_site(archive)
+        assert result.success and result.output_path is not None
+        child = self._root_data(result.output_path)["children"][0]
+        assert child["data_files"][0]["path"].startswith("file://")
+
     def test_output_outside_the_archive_uses_file_uris(self, temp_dir):
         archive = temp_dir / "archive"
         archive.mkdir()
@@ -603,6 +635,61 @@ class TestLinksResolveFromThePage:
         data = self._root_data(result.output_path)
         assert data["data_files"][0]["path"].startswith("file://")
         assert data["children"][0]["site_url"].startswith("file://")
+
+
+class TestOutputSafety:
+    """build must never overwrite the archive's own README."""
+
+    def _archive(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Mine\n\nMy words.")
+        (temp_dir / "a.json").write_text("{}")
+        return temp_dir
+
+    def test_refuses_output_equal_to_archive(self, temp_dir):
+        archive = self._archive(temp_dir)
+        result = build_site(archive, output=archive, force=True)
+        assert not result.success
+        assert (archive / "README.md").read_text() == "# Mine\n\nMy words."
+
+    def test_refuses_output_that_contains_the_archive(self, temp_dir):
+        archive = temp_dir / "inner"
+        archive.mkdir()
+        self._archive(archive)
+        (temp_dir / "README.md").write_text("# Parent\n\nParent.")
+        result = build_site(archive, output=temp_dir, force=True)
+        assert not result.success
+        assert (temp_dir / "README.md").read_text() == "# Parent\n\nParent."
+
+    def test_rebuilding_into_a_custom_output_does_not_nest_it(self, temp_dir):
+        archive = self._archive(temp_dir)
+        out = archive / "viewer"
+        assert build_site(archive, output=out).success
+        second = build_site(archive, output=out)
+        assert second.success and second.sources_count == 0
+
+
+class TestSanitizer:
+    """README HTML keeps formatting but loses anything that can run."""
+
+    def test_entity_encoded_javascript_href(self):
+        html = markdown_to_html('<a href="jav&#97;script:alert(1)">x</a>')
+        assert "javascript" not in html.lower() and "jav&#97;" not in html
+
+    def test_unquoted_and_data_uris(self):
+        html = markdown_to_html("<a href=javascript:alert(1)>x</a> <img src=data:text/html,x>")
+        assert "javascript" not in html and "data:" not in html
+
+    def test_keeps_safe_markup(self):
+        md = "# T\n\n**b** [link](https://example.com) [rel](photos/a.png)\n\n| a |\n|---|\n| 1 |\n\n![alt](p.png)"
+        html = markdown_to_html(md)
+        for piece in ("<h1>", "<strong>", 'href="https://example.com"',
+                      'href="photos/a.png"', "<table>", '<img alt="alt" src="p.png"'):
+            assert piece in html, piece
+
+    def test_drops_style_iframe_and_handlers(self):
+        html = markdown_to_html('<style>p{}</style><iframe src="x"></iframe><p onclick="x">t</p>')
+        assert "style" not in html and "iframe" not in html and "onclick" not in html
+        assert "<p>t</p>" in html
 
 
 class TestDataFileEntries:
@@ -620,11 +707,12 @@ class TestDataFileEntries:
         (temp_dir / "c.py").write_text("print(1)\n")
         files = self._files(temp_dir)
         assert files["a.json"]["durable"] is True
+        assert files["a.json"]["warns"] is False
         assert files["b.heic"]["durable"] is False
-        assert files["b.heic"]["plain_text"] is False
-        # Not in the registry, but a text editor opens it: listed, not flagged
+        assert files["b.heic"]["warns"] is True
+        # Not in the format list, but a text editor opens it: listed, not flagged
         assert files["c.py"]["durable"] is False
-        assert files["c.py"]["plain_text"] is True
+        assert files["c.py"]["warns"] is False
 
     def test_preview_kind_comes_from_the_registry(self, temp_dir):
         for name in ("p.png", "s.mp3", "v.mp4", "d.pdf", "t.tiff"):
