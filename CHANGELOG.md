@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- A durable format registry, `longecho.formats.FORMATS`. Each entry records
+  its extensions, media type, category, the readers that can open it
+  (standard tool, web browser, text editor), and the reason it qualifies
+  under the Library of Congress sustainability factors, which are now the
+  written criteria for the list. `DURABLE_EXTENSIONS` and
+  `DURABLE_FORMAT_CATEGORIES` are derived from it and keep working.
+- New durable formats: `.pdf`, `.epub`, `.eml`, `.mbox`, `.svg`, `.tif`,
+  `.tiff`, `.wav`, `.flac`, `.mp3`, `.ogg`, `.opus`, `.mp4`, `.webm`, with
+  new Mail, Audio, and Video categories. A directory holding only one of
+  these plus a README is now compliant.
+- Compliance warnings: `ComplianceResult.warnings` lists
+  `ComplianceWarning(kind, message, paths)` for files that are neither in a
+  recognized format nor plain text (grouped by extension) and for SQLite
+  databases with a non-empty `-wal` or `-journal` sidecar. A file with an
+  unknown extension whose first 4 KB is UTF-8 without NUL bytes (source
+  code, `LICENSE`, `.tex`) counts as plain text and does not warn; this is
+  the one place longecho reads inside a file, and it never affects
+  compliance (`longecho.formats.reads_as_text`). Warnings never change the verdict or exit code, and
+  are reported on failing results too. `check` prints them (`--verbose`
+  names the files); `query --json` includes them when present.
+- `longecho formats` shows each format's readers and reason;
+  `longecho formats --json` prints the registry as data.
+- `EchoSource.files`: every file a source owns, durable or not.
+- Inline previews in the generated site for images, audio, and video that
+  browsers play, derived from the registry (lazy-loaded).
+
+### Changed
+- The generated site lists every file a source owns, marking files that are
+  neither in a recognized format nor plain text, instead of silently leaving
+  them out. SQLite
+  sidecars are not listed.
+- The degradation ladder is one table that pairs each kind of reader with
+  the formats it can open, with a new "standard tools" rung. It replaces the
+  separate format ladder of the early essays.
+- The top-level README is the archive's "start here" note; the spec now says
+  so and describes what it should contain. `START_HERE.txt` from the early
+  essays is retired.
+- `should_skip_directory` and `SKIP_DIRECTORIES` live in `checker.py`
+  (still importable from `discovery`).
+
+### Fixed
+- Links in the generated site were computed relative to the archive root,
+  but the page lives in `site/`, so every "Data Files" link and every "Open
+  interactive viewer" link pointed into `site/` and returned not found.
+  Links are now relative to the page (`../photos/a.png`). A site written with
+  `--output` outside the archive links by absolute `file://` URI; before,
+  that check compared against the output's parent and could pick a
+  relative path that did not resolve.
+
 ## [0.5.0] - 2026-10-19
 
 ### Changed

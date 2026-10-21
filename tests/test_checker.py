@@ -7,6 +7,7 @@ from longecho.checker import (
     DURABLE_FORMAT_CATEGORIES,
     ComplianceResult,
     EchoSource,
+    WarningKind,
     check_compliance,
     detect_durable_formats,
     find_readme,
@@ -393,3 +394,150 @@ class TestCheckComplianceEchoSource:
         result = check_compliance(temp_dir)
         assert result.source is not None
         assert result.source.name == temp_dir.name
+
+
+# Bytes no text editor would show as text: a NUL, then non-UTF-8.
+BINARY = b"\x00\x01\xffheic"
+
+
+class TestOwnedFiles:
+    """EchoSource.files lists every file the source owns, durable or not."""
+
+    def test_lists_durable_and_unrecognized(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "b.heic").write_bytes(b"x")
+        source = check_compliance(temp_dir).source
+        assert source is not None
+        assert [p.name for p in source.files] == ["a.json", "b.heic"]
+
+    def test_excludes_readme_nested_sources_site_and_skipped_dirs(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        for name in ("sub", "site", "node_modules"):
+            d = temp_dir / name
+            d.mkdir()
+            (d / "x.json").write_text("{}")
+        (temp_dir / "sub" / "README.md").write_text("# Sub\n\nSub.")
+        source = check_compliance(temp_dir).source
+        assert source is not None
+        assert [p.name for p in source.files] == ["a.json"]
+
+    def test_dotfiles_are_not_owned(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / ".DS_Store").write_bytes(BINARY)
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert [p.name for p in result.source.files] == ["a.json"]
+        assert result.warnings == []
+
+    def test_files_in_plain_subdirectories_are_owned(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "data").mkdir()
+        (temp_dir / "data" / "r.jsonl").write_text("")
+        source = check_compliance(temp_dir).source
+        assert source is not None
+        assert [p.relative_to(temp_dir).as_posix() for p in source.files] == ["data/r.jsonl"]
+
+
+class TestComplianceWarnings:
+    """Warnings flag risks without changing the compliance verdict."""
+
+    def _archive(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        return temp_dir
+
+    def test_clean_archive_has_no_warnings(self, temp_dir):
+        result = check_compliance(self._archive(temp_dir))
+        assert result.compliant and result.warnings == []
+
+    def test_unrecognized_formats_grouped_by_extension(self, temp_dir):
+        self._archive(temp_dir)
+        (temp_dir / "one.heic").write_bytes(BINARY)
+        (temp_dir / "two.HEIC").write_bytes(BINARY)
+        (temp_dir / "memo.docx").write_bytes(BINARY)
+        result = check_compliance(temp_dir)
+        assert result.compliant
+        unrecognized = [w for w in result.warnings if w.kind is WarningKind.UNRECOGNIZED_FORMAT]
+        assert [len(w.paths) for w in unrecognized] == [1, 2]  # .docx, then .heic
+        assert ".heic" in unrecognized[1].message
+
+    def test_binary_files_without_extension(self, temp_dir):
+        self._archive(temp_dir)
+        (temp_dir / "blob").write_bytes(BINARY)
+        result = check_compliance(temp_dir)
+        assert len(result.warnings) == 1
+        assert "no extension" in result.warnings[0].message
+
+    def test_plain_text_in_any_extension_is_quiet(self, temp_dir):
+        """A text editor opens these, so a future reader can too."""
+        self._archive(temp_dir)
+        (temp_dir / "LICENSE").write_text("MIT License\n")
+        (temp_dir / "analysis.py").write_text("print('caf\u00e9')\n", encoding="utf-8")
+        (temp_dir / "paper.tex").write_text("\\documentclass{article}\n")
+        (temp_dir / "empty.cfg").write_bytes(b"")
+        assert check_compliance(temp_dir).warnings == []
+
+    def test_non_utf8_text_still_warns(self, temp_dir):
+        self._archive(temp_dir)
+        (temp_dir / "old.nfo").write_bytes(b"caf\xe9 au lait\n")  # Latin-1
+        assert len(check_compliance(temp_dir).warnings) == 1
+
+    def test_nonempty_wal_is_a_risk(self, temp_dir):
+        self._archive(temp_dir)
+        (temp_dir / "mail.db").write_bytes(BINARY)
+        (temp_dir / "mail.db-wal").write_bytes(b"frames")
+        (temp_dir / "mail.db-shm").write_bytes(b"index")
+        result = check_compliance(temp_dir)
+        assert [w.kind for w in result.warnings] == [WarningKind.SIDECAR_AT_RISK]
+        warning = result.warnings[0]
+        assert warning.paths == [temp_dir.resolve() / "mail.db-wal"]
+        assert "<db>" not in warning.message
+        assert "sqlite3 mail.db " in warning.message
+
+    def test_sidecar_remedy_uses_the_path_from_the_source_root(self, temp_dir):
+        self._archive(temp_dir)
+        (temp_dir / "notes").mkdir()
+        (temp_dir / "notes" / "j.db").write_bytes(BINARY)
+        (temp_dir / "notes" / "j.db-wal").write_bytes(b"frames")
+        message = check_compliance(temp_dir).warnings[0].message
+        assert message.startswith("notes/j.db-wal ")
+        assert "sqlite3 notes/j.db " in message
+
+    def test_empty_wal_and_shm_are_quiet(self, temp_dir):
+        """A checkpointed database leaves an empty -wal; -shm is always transient."""
+        self._archive(temp_dir)
+        (temp_dir / "mail.db").write_bytes(BINARY)
+        (temp_dir / "mail.db-wal").write_bytes(b"")
+        (temp_dir / "mail.db-shm").write_bytes(b"index")
+        assert check_compliance(temp_dir).warnings == []
+
+    def test_warnings_reported_even_when_not_compliant(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nOnly HEIC here.")
+        (temp_dir / "photo.heic").write_bytes(BINARY)
+        result = check_compliance(temp_dir)
+        assert not result.compliant
+        assert [w.kind for w in result.warnings] == [WarningKind.UNRECOGNIZED_FORMAT]
+
+    def test_nested_source_warnings_stay_with_the_nested_source(self, temp_dir):
+        self._archive(temp_dir)
+        sub = temp_dir / "sub"
+        sub.mkdir()
+        (sub / "README.md").write_text("# Sub\n\nSub.")
+        (sub / "x.json").write_text("{}")
+        (sub / "y.heic").write_bytes(BINARY)
+        assert check_compliance(temp_dir).warnings == []
+        assert len(check_compliance(sub).warnings) == 1
+
+
+class TestNewlyDurableFormats:
+    """Formats added in 0.6.0 make a directory compliant on their own."""
+
+    def test_pdf_alone_is_compliant(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Scans\n\nScanned letters.")
+        (temp_dir / "letter.pdf").write_bytes(b"%PDF-1.7")
+        result = check_compliance(temp_dir)
+        assert result.compliant
+        assert result.source is not None and result.source.durable_formats == [".pdf"]

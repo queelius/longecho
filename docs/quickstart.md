@@ -30,7 +30,11 @@ That's it. No special files, no schema, no version numbers.
 If the check fails, you are usually one step away. Do two things:
 
 1. Add a `README.md` at the root that says, in plain words, what the data is and where it came from.
-2. Keep your data in durable formats: SQLite, JSON, JSONL, Markdown, CSV, plain text, common image formats, and similar.
+2. Keep your data in durable formats: SQLite, JSON, JSONL, Markdown, CSV, plain text, PDF, email files, and common image, audio, and video formats.
+
+If the directory is the top of a whole archive, make its README the note you would want a stranger to find first: what this is, whose it is, and how to open each kind of file inside.
+
+`check` also prints warnings when it sees files that are neither in a recognized format nor plain text, or a SQLite database whose latest changes still sit in a `-wal` file beside it. Warnings do not fail the check; they tell you what a future reader might not be able to open, or might not get.
 
 See the [Specification](spec.md) for the full format list and the README conventions, including the optional `contents` frontmatter field.
 

@@ -1,5 +1,7 @@
 """Tests for the longecho CLI."""
 
+import json
+
 from typer.testing import CliRunner
 
 from longecho.cli import app
@@ -40,6 +42,54 @@ class TestCheckCommand:
         result = runner.invoke(app, ["check", str(temp_dir), "-V"])
         assert result.exit_code == 0
         assert "author" in result.stdout
+
+
+class TestCheckWarnings:
+    """check reports warnings without changing the exit code."""
+
+    def _archive(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "photo.heic").write_bytes(b"\x00\xffheic")
+        return temp_dir
+
+    def test_compliant_with_warning_exits_zero(self, temp_dir):
+        result = runner.invoke(app, ["check", str(self._archive(temp_dir))])
+        assert result.exit_code == 0
+        assert ".heic" in result.stdout
+
+    def test_verbose_lists_the_files(self, temp_dir):
+        result = runner.invoke(app, ["check", str(self._archive(temp_dir)), "-V"])
+        assert "photo.heic" in result.stdout
+
+    def test_verbose_caps_the_file_list(self, temp_dir):
+        from longecho.cli import MAX_WARNING_PATHS
+
+        self._archive(temp_dir)
+        for i in range(MAX_WARNING_PATHS):
+            (temp_dir / f"extra{i}.heic").write_bytes(b"\x00\xffheic")
+        result = runner.invoke(app, ["check", str(temp_dir), "-V"])
+        assert "and 1 more" in result.stdout
+
+    def test_non_compliant_still_shows_warnings(self, temp_dir):
+        (temp_dir / "README.md").write_text("# T\n\nT.")
+        (temp_dir / "photo.heic").write_bytes(b"\x00\xffheic")
+        result = runner.invoke(app, ["check", str(temp_dir)])
+        assert result.exit_code == 1
+        assert ".heic" in result.stdout
+
+    def test_query_json_includes_warnings_only_when_present(self, temp_dir):
+        self._archive(temp_dir)
+        clean = temp_dir / "clean"
+        clean.mkdir()
+        (clean / "README.md").write_text("# Clean\n\nClean.")
+        (clean / "x.json").write_text("{}")
+        result = runner.invoke(app, ["query", str(temp_dir), "--json"])
+        by_path = {e["path"]: e for e in json.loads(result.stdout)}
+        warning = by_path["."]["warnings"][0]
+        assert warning["kind"] == "unrecognized-format"
+        assert warning["paths"] == ["photo.heic"]
+        assert "warnings" not in by_path["./clean"]
 
 
 class TestQueryCommand:
@@ -130,6 +180,18 @@ class TestSpecCommand:
         assert ".json" in result.stdout
         assert ".html" in result.stdout
 
+    def test_spec_states_the_durability_criteria(self):
+        result = runner.invoke(app, ["spec"])
+        assert "Library of Congress" in result.stdout
+        assert "Impact of patents" in result.stdout
+
+    def test_spec_lists_every_category(self):
+        from longecho.formats import DURABLE_FORMAT_CATEGORIES
+
+        result = runner.invoke(app, ["spec"])
+        for category in DURABLE_FORMAT_CATEGORIES:
+            assert category in result.stdout
+
     def test_spec_includes_principles(self):
         result = runner.invoke(app, ["spec"])
 
@@ -164,6 +226,25 @@ class TestFormatsCommand:
         assert "Documents" in result.stdout
         assert ".db" in result.stdout
         assert ".json" in result.stdout
+
+    def test_formats_shows_readers_and_reasons(self):
+        result = runner.invoke(app, ["formats"])
+        assert ".pdf" in result.stdout
+        assert "web browser" in result.stdout
+        assert "ISO 32000" in result.stdout
+
+    def test_formats_json_is_the_registry(self):
+        from longecho.formats import FORMATS
+
+        result = runner.invoke(app, ["formats", "--json"])
+        assert result.exit_code == 0
+        entries = json.loads(result.stdout)
+        assert len(entries) == len(FORMATS)
+        pdf = next(e for e in entries if ".pdf" in e["extensions"])
+        assert pdf["mimetype"] == "application/pdf"
+        assert pdf["category"] == "Documents"
+        assert sorted(pdf["readers"]) == ["standard tool", "web browser"]
+        assert pdf["rationale"]
 
 
 class TestVersionFlag:

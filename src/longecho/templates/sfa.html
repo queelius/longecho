@@ -146,15 +146,22 @@
 
         .data-files { margin-top: 1.5rem; }
         .data-files h3 { margin-bottom: 0.75rem; }
-        .file-link {
-            display: block;
+        .file-entry {
             padding: 0.5rem 0;
-            color: var(--link);
-            text-decoration: none;
             border-bottom: 1px solid var(--border);
         }
+        .file-entry:last-child { border-bottom: none; }
+        .file-link { color: var(--link); text-decoration: none; }
         .file-link:hover { text-decoration: underline; }
-        .file-link:last-child { border-bottom: none; }
+        .file-flag {
+            margin-left: 0.5rem;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+        .file-preview { display: block; margin-top: 0.5rem; max-width: 100%; }
+        img.file-preview { max-height: 240px; border-radius: 4px; }
+        audio.file-preview { width: 100%; }
+        video.file-preview { max-height: 360px; }
 
         footer {
             margin-top: 3rem;
@@ -333,6 +340,44 @@
             }
         }
 
+        // One row per data file: a link, a flag when the format is neither
+        // recognized nor plain text, and an inline preview when the browser can
+        // show the file itself (the build decides which, from the registry).
+        function createFileEntry(f) {
+            var entry = document.createElement('div');
+            entry.className = 'file-entry';
+
+            var a = document.createElement('a');
+            a.className = 'file-link';
+            a.href = f.path;
+            a.textContent = f.name;
+            entry.appendChild(a);
+
+            if (f.durable === false && !f.plain_text) {
+                var flag = document.createElement('span');
+                flag.className = 'file-flag';
+                flag.textContent = 'not a recognized format or plain text';
+                entry.appendChild(flag);
+            }
+
+            var media = null;
+            if (f.preview === 'image') {
+                media = document.createElement('img');
+                media.loading = 'lazy';
+                media.alt = f.name;
+            } else if (f.preview === 'audio' || f.preview === 'video') {
+                media = document.createElement(f.preview);
+                media.controls = true;
+                media.preload = 'none';
+            }
+            if (media) {
+                media.className = 'file-preview';
+                media.src = f.path;
+                entry.appendChild(media);
+            }
+            return entry;
+        }
+
         function renderDetail(source) {
             detailEl.textContent = '';
 
@@ -404,12 +449,7 @@
                 filesDiv.appendChild(h3);
 
                 for (var j = 0; j < source.data_files.length; j++) {
-                    var f = source.data_files[j];
-                    var a = document.createElement('a');
-                    a.className = 'file-link';
-                    a.href = f.path;
-                    a.textContent = f.name;
-                    filesDiv.appendChild(a);
+                    filesDiv.appendChild(createFileEntry(source.data_files[j]));
                 }
 
                 detailEl.appendChild(filesDiv);

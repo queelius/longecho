@@ -1,30 +1,42 @@
 """longecho compliance checker."""
 
+import os
+from collections import defaultdict
 from dataclasses import dataclass, field
+from enum import Enum
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
-# Single source of truth for durable format categories.
-# All display, spec, and compliance logic derives from this structure.
-DURABLE_FORMAT_CATEGORIES: dict[str, list[str]] = {
-    "Structured data": [".db", ".sqlite", ".sqlite3", ".json", ".jsonl"],
-    "Documents": [".md", ".markdown", ".txt", ".text", ".rst", ".html", ".htm"],
-    # .zip is the original archive format. .gz covers gzip (file.json.gz,
-    # file.tar.gz, etc.); .tgz is the compact tar-gzip spelling. All three
-    # have been decoded by every OS for 30+ years, so they clear the
-    # "will I still be able to open this" bar the rest of the list respects.
-    "Archives": [".zip", ".gz", ".tgz"],
-    "Images": [".jpg", ".jpeg", ".png", ".webp", ".gif"],
-    "Tabular / data": [".csv", ".tsv", ".xml", ".yaml", ".yml"],
-}
+from .formats import (
+    DURABLE_EXTENSIONS,
+    DURABLE_FORMAT_CATEGORIES,
+    format_for,
+    reads_as_text,
+    sidecar_base,
+)
 
-# Derived flat set for O(1) membership testing
-DURABLE_EXTENSIONS: set[str] = {
-    ext for exts in DURABLE_FORMAT_CATEGORIES.values() for ext in exts
-}
+__all__ = [
+    "DURABLE_EXTENSIONS",
+    "DURABLE_FORMAT_CATEGORIES",
+    "ComplianceResult",
+    "ComplianceWarning",
+    "EchoSource",
+    "Readme",
+    "WarningKind",
+    "check_compliance",
+    "detect_durable_formats",
+    "find_readme",
+    "find_warnings",
+    "is_durable_format",
+    "parse_readme",
+    "should_skip_directory",
+]
+
+# In lookup order: the first one present is the source's README.
+README_NAMES: tuple[str, ...] = ("README.md", "README.txt", "readme.md", "readme.txt")
 
 EXCLUDE_PATTERNS: set[str] = {
     "README.md", "README.txt",
@@ -33,6 +45,22 @@ EXCLUDE_PATTERNS: set[str] = {
     "pyproject.toml", "setup.py", "setup.cfg",
     "requirements.txt",
 }
+
+# Directories that never hold a source's own data (dot-prefixed dirs are
+# always skipped via the startswith(".") check in should_skip_directory, so
+# only non-dot names need to be listed here).
+SKIP_DIRECTORIES: set[str] = {
+    "node_modules", "__pycache__",
+    "venv", "env",
+    "dist", "build",
+    "site-packages",
+}
+
+
+def should_skip_directory(name: str) -> bool:
+    """Check if a directory should be skipped during discovery."""
+    return name.startswith(".") or name in SKIP_DIRECTORIES or name.endswith(".egg-info")
+
 
 DEFAULT_FORMAT_SCAN_DEPTH: int = 2
 MAX_README_SUMMARY_LENGTH: int = 500
@@ -139,12 +167,31 @@ class EchoSource:
     site_path: Optional[Path] = None
     frontmatter: Optional[dict] = None
     contents: Optional[list[dict]] = None
+    # Every file this source owns, durable or not, sorted. Files inside nested
+    # sources, site/, and skipped directories belong elsewhere.
+    files: list[Path] = field(default_factory=list)
 
     def __str__(self) -> str:
         desc = self.description or "No description"
         if len(desc) > 60:
             desc = desc[:57] + "..."
         return f"{self.path}: {desc}"
+
+
+class WarningKind(Enum):
+    """Why a warning was raised. Warnings never change the compliance verdict."""
+
+    UNRECOGNIZED_FORMAT = "unrecognized-format"
+    SIDECAR_AT_RISK = "sidecar-at-risk"
+
+
+@dataclass
+class ComplianceWarning:
+    """Something a future reader may lose, found while checking a source."""
+
+    kind: WarningKind
+    message: str
+    paths: list[Path]
 
 
 @dataclass
@@ -155,6 +202,7 @@ class ComplianceResult:
     path: Path
     reason: Optional[str] = None
     source: Optional[EchoSource] = None  # populated when compliant
+    warnings: list[ComplianceWarning] = field(default_factory=list)
 
     def __str__(self) -> str:
         if self.compliant:
@@ -164,38 +212,109 @@ class ComplianceResult:
 
 def find_readme(path: Path) -> Optional[Path]:
     """Find README file at the root of a directory."""
-    for name in ["README.md", "README.txt", "readme.md", "readme.txt"]:
+    for name in README_NAMES:
         readme = path / name
         if readme.is_file():
             return readme
     return None
 
 
-def detect_durable_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> list[str]:
-    """Detect durable file formats in a directory up to max_depth."""
-    found: set[str] = set()
+@dataclass
+class _Inventory:
+    """What one walk of a directory found."""
 
-    def scan_directory(dir_path: Path, depth: int):
+    durable: set[str]  # durable suffixes anywhere in the walk
+    owned: list[Path]  # files the source itself owns (see EchoSource.files)
+
+
+def _take_inventory(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> _Inventory:
+    """Walk ``path`` once, collecting durable suffixes and the source's own files.
+
+    Durable suffixes are collected from the whole walk, nested sources and
+    site/ included, so an archive whose data lives entirely in sub-sources is
+    still compliant. Ownership stops at nested sources, site/, and skipped
+    directories, which hold someone else's files. ``os.scandir`` supplies each
+    entry's type without a separate stat, which keeps ``query ~`` fast.
+    """
+    inventory = _Inventory(durable=set(), owned=[])
+
+    def scan(dir_path: Path, depth: int, owned: bool) -> None:
         if depth > max_depth:
             return
-
         try:
-            for item in dir_path.iterdir():
-                if item.name.startswith("."):
+            with os.scandir(dir_path) as it:
+                entries = sorted(it, key=lambda e: e.name)
+        except OSError:
+            return
+        if depth > 0 and any(e.name in README_NAMES and e.is_file() for e in entries):
+            owned = False  # a nested source owns what is under it
+        for entry in entries:
+            if entry.name.startswith("."):
+                continue
+            if entry.is_file():
+                if entry.name in EXCLUDE_PATTERNS:
                     continue
+                suffix = os.path.splitext(entry.name)[1].lower()
+                if suffix in DURABLE_EXTENSIONS:
+                    inventory.durable.add(suffix)
+                if owned:
+                    inventory.owned.append(dir_path / entry.name)
+            elif entry.is_dir():
+                still_owned = owned and not (
+                    entry.name == "site" or should_skip_directory(entry.name)
+                )
+                scan(dir_path / entry.name, depth + 1, still_owned)
 
-                if item.is_file():
-                    if item.name not in EXCLUDE_PATTERNS:
-                        suffix = item.suffix.lower()
-                        if suffix in DURABLE_EXTENSIONS:
-                            found.add(suffix)
-                elif item.is_dir():
-                    scan_directory(item, depth + 1)
-        except PermissionError:
-            pass
+    scan(path, 0, owned=True)
+    return inventory
 
-    scan_directory(path, 0)
-    return sorted(found)
+
+def detect_durable_formats(path: Path, max_depth: int = DEFAULT_FORMAT_SCAN_DEPTH) -> list[str]:
+    """Detect durable file formats in a directory up to max_depth."""
+    return sorted(_take_inventory(path, max_depth).durable)
+
+
+def _nonempty(path: Path) -> bool:
+    try:
+        return path.stat().st_size > 0
+    except OSError:  # a live database can remove its sidecar mid-walk
+        return False
+
+
+def find_warnings(root: Path, files: list[Path]) -> list[ComplianceWarning]:
+    """Warn about owned files a future reader may be unable to open or may lose.
+
+    A file outside the registry is only a problem when it is not plain text
+    either: a text editor opens a .py or a LICENSE as well as it opens a .txt.
+    """
+    warnings: list[ComplianceWarning] = []
+    unrecognized: dict[str, list[Path]] = defaultdict(list)
+
+    for f in files:
+        paired = sidecar_base(f)
+        if paired is not None:
+            base, sidecar = paired
+            if sidecar.risk and _nonempty(f):
+                risk = sidecar.risk.replace("<db>", base.relative_to(root).as_posix())
+                warnings.append(ComplianceWarning(
+                    kind=WarningKind.SIDECAR_AT_RISK,
+                    message=f"{f.relative_to(root).as_posix()} {risk}",
+                    paths=[f],
+                ))
+        elif format_for(f) is None and not reads_as_text(f):
+            unrecognized[f.suffix.lower()].append(f)
+
+    for suffix in sorted(unrecognized):
+        paths = unrecognized[suffix]
+        count = f"{len(paths)} file{'s' if len(paths) != 1 else ''}"
+        what = f"in {suffix}" if suffix else "with no extension"
+        what += ": not a recognized durable format, and not plain text"
+        warnings.append(ComplianceWarning(
+            kind=WarningKind.UNRECOGNIZED_FORMAT,
+            message=f"{count} {what}",
+            paths=paths,
+        ))
+    return warnings
 
 
 def is_durable_format(extension: str) -> bool:
@@ -234,11 +353,16 @@ def check_compliance(path: Path) -> ComplianceResult:
             compliant=False, path=path, reason="No README.md or README.txt found"
         )
 
-    durable = detect_durable_formats(path)
+    inventory = _take_inventory(path)
+    durable = sorted(inventory.durable)
+    warnings = find_warnings(path, inventory.owned)
 
     if not durable:
         return ComplianceResult(
-            compliant=False, path=path, reason="No durable data formats found"
+            compliant=False,
+            path=path,
+            reason="No durable data formats found",
+            warnings=warnings,
         )
 
     readme = parse_readme(readme_file)
@@ -268,6 +392,7 @@ def check_compliance(path: Path) -> ComplianceResult:
         site_path=site_path,
         frontmatter=frontmatter,
         contents=contents,
+        files=inventory.owned,
     )
 
-    return ComplianceResult(compliant=True, path=path, source=source)
+    return ComplianceResult(compliant=True, path=path, source=source, warnings=warnings)

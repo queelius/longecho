@@ -510,7 +510,7 @@ class TestRecursiveDataFiles:
         """Don't descend into directories that are themselves compliant sources."""
         (temp_dir / "top.json").write_text("{}")
 
-        # A nested source — has its own README
+        # A nested source: it has its own README
         sub = temp_dir / "subsource"
         sub.mkdir()
         (sub / "README.md").write_text("# Sub\n\nA sub-source.")
@@ -548,6 +548,99 @@ class TestRecursiveDataFiles:
         assert "data.json" in names
         assert "README.md" not in names
         assert "CLAUDE.md" not in names
+
+
+class TestLinksResolveFromThePage:
+    """Every link in the SFA must reach its file when followed from index.html."""
+
+    def _root_data(self, output_path):
+        import re
+        html = (output_path / "index.html").read_text()
+        match = re.search(r"var ROOT = (.+?);\n", html)
+        assert match is not None
+        return json.loads(match.group(1))
+
+    def _archive(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Root\n\nRoot.")
+        (temp_dir / "top.json").write_text("{}")
+        child = temp_dir / "photos"
+        child.mkdir()
+        (child / "README.md").write_text("# Photos\n\nPhotos.")
+        (child / "a.png").write_bytes(b"png")
+        (child / "site").mkdir()
+        (child / "site" / "README.md").write_text("---\ngenerator: photo-memex\n---\n")
+        (child / "site" / "index.html").write_text("<html>viewer</html>")
+        return temp_dir
+
+    def _assert_links_resolve(self, output_path, data):
+        for f in data["data_files"]:
+            target = (output_path / f["path"]).resolve()
+            assert target.is_file(), f["path"]
+        if data["site_url"]:
+            assert (output_path / data["site_url"]).resolve().is_file(), data["site_url"]
+        for child in data["children"]:
+            self._assert_links_resolve(output_path, child)
+
+    def test_default_site_dir(self, temp_dir):
+        result = build_site(self._archive(temp_dir))
+        assert result.success and result.output_path is not None
+        data = self._root_data(result.output_path)
+        assert data["children"][0]["site_url"] == "../photos/site/index.html"
+        self._assert_links_resolve(result.output_path, data)
+
+    def test_custom_output_inside_the_archive(self, temp_dir):
+        archive = self._archive(temp_dir)
+        result = build_site(archive, output=archive / "views" / "all")
+        assert result.success and result.output_path is not None
+        self._assert_links_resolve(result.output_path, self._root_data(result.output_path))
+
+    def test_output_outside_the_archive_uses_file_uris(self, temp_dir):
+        archive = temp_dir / "archive"
+        archive.mkdir()
+        self._archive(archive)
+        result = build_site(archive, output=temp_dir / "elsewhere")
+        assert result.success and result.output_path is not None
+        data = self._root_data(result.output_path)
+        assert data["data_files"][0]["path"].startswith("file://")
+        assert data["children"][0]["site_url"].startswith("file://")
+
+
+class TestDataFileEntries:
+    """Each data file entry says whether it is durable and how it previews."""
+
+    def _files(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Test\n\nTest source.")
+        source = check_compliance(temp_dir).source
+        assert source is not None
+        return {f["name"]: f for f in _get_data_files(source, temp_dir / "site")}
+
+    def test_unrecognized_files_are_listed_and_flagged(self, temp_dir):
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "b.heic").write_bytes(b"\x00\xffheic")
+        (temp_dir / "c.py").write_text("print(1)\n")
+        files = self._files(temp_dir)
+        assert files["a.json"]["durable"] is True
+        assert files["b.heic"]["durable"] is False
+        assert files["b.heic"]["plain_text"] is False
+        # Not in the registry, but a text editor opens it: listed, not flagged
+        assert files["c.py"]["durable"] is False
+        assert files["c.py"]["plain_text"] is True
+
+    def test_preview_kind_comes_from_the_registry(self, temp_dir):
+        for name in ("p.png", "s.mp3", "v.mp4", "d.pdf", "t.tiff"):
+            (temp_dir / name).write_bytes(b"x")
+        files = self._files(temp_dir)
+        assert files["p.png"]["preview"] == "image"
+        assert files["s.mp3"]["preview"] == "audio"
+        assert files["v.mp4"]["preview"] == "video"
+        assert files["d.pdf"]["preview"] is None
+        assert files["t.tiff"]["preview"] is None
+
+    def test_sqlite_sidecars_are_not_listed(self, temp_dir):
+        (temp_dir / "mail.db").write_bytes(b"x")
+        (temp_dir / "mail.db-wal").write_bytes(b"x")
+        (temp_dir / "mail.db-shm").write_bytes(b"x")
+        assert list(self._files(temp_dir)) == ["mail.db"]
 
 
 class TestIsForeignSite:

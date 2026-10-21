@@ -12,7 +12,7 @@ I build these tools under no illusion of unlimited time, which is exactly why th
 
 **Self-Describing.** Every collection explains itself: a human or LLM finding your data in 50 years, with no context, should be able to understand what they're looking at.
 
-**Durable Formats.** Store data in formats readable without proprietary software, with multiple implementations and proven longevity.
+**Durable Formats.** Store data in formats readable without proprietary software, with multiple implementations and proven longevity. longecho judges formats against the Library of Congress sustainability factors and records the reason for each one.
 
 **Graceful Degradation.** An archive stays useful as technology disappears, layer by layer, down to the plain text underneath.
 
@@ -24,13 +24,16 @@ I build these tools under no illusion of unlimited time, which is exactly why th
 
 The whole design rests on this table. Each row survives the loss of the row above it.
 
-| If you have... | You can still... |
-|----------------|------------------|
-| Modern LLMs | Have conversations with the archive |
-| A web browser | Navigate a generated site |
-| A file browser | Explore organized directories |
-| A text editor | Read plain text files |
-| Only fragments | Understand each piece independently |
+| If you have... | You can still... | Because the archive keeps... |
+|----------------|------------------|------------------------------|
+| Modern LLMs | Have conversations with the archive | Text of every kind, and READMEs that explain it |
+| Standard tools | Query databases, unpack bundles, open scans and ebooks | SQLite, ZIP and gzip, TIFF, EPUB |
+| A web browser | Navigate a generated site; view images, PDFs, audio, and video | HTML, PDF, JPEG, PNG, SVG, MP3, FLAC, MP4, WebM |
+| A file browser | Explore organized directories | A self-describing README in every directory |
+| A text editor | Read plain text files | Markdown, plain text, JSON, JSONL, CSV, YAML, email |
+| Only fragments | Understand each piece independently | A README in every piece |
+
+Read across, the table is one rule: for each kind of reader, the archive holds at least one copy of what matters in a format that reader can still open. The early essays told this twice, once as a ladder of readers and once as a ladder of formats (the same conversations kept as a database, as JSONL, as Markdown, as HTML, as plain text). Those are the same ladder seen from its two ends. `longecho formats` shows which reader opens each recognized format.
 
 A directory is **longecho-compliant** when it has a README explaining what the data is plus data stored in durable formats. That is the entire contract. No schema, no version numbers, no special files.
 

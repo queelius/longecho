@@ -20,13 +20,16 @@ longecho is a bet that with enough self-description and simple formats, your dat
 
 **3. Graceful Degradation.** An archive should remain useful as technology disappears:
 
-| If you have... | You can still... |
-|----------------|------------------|
-| Modern LLMs | Have conversations with the archive |
-| A web browser | Navigate a generated site |
-| A file browser | Explore organized directories |
-| A text editor | Read plain text files |
-| Only fragments | Understand each piece independently |
+| If you have... | You can still... | Because the archive keeps... |
+|----------------|------------------|------------------------------|
+| Modern LLMs | Have conversations with the archive | Text of every kind, and READMEs that explain it |
+| Standard tools | Query databases, unpack bundles, open scans and ebooks | SQLite, ZIP and gzip, TIFF, EPUB |
+| A web browser | Navigate a generated site; view images, PDFs, audio, and video | HTML, PDF, JPEG, PNG, SVG, MP3, FLAC, MP4, WebM |
+| A file browser | Explore organized directories | A self-describing README in every directory |
+| A text editor | Read plain text files | Markdown, plain text, JSON, JSONL, CSV, YAML, email |
+| Only fragments | Understand each piece independently | A README in every piece |
+
+Read across, the table is one rule: for each kind of reader, keep at least one copy of what matters in a format that reader can still open. `longecho formats` shows which reader opens each recognized format.
 
 **4. Local-First.** The archive must work entirely offline. Cloud services can sync or backup, but the archive is complete without them.
 
@@ -45,25 +48,36 @@ That's it. No special files, no schema, no version numbers.
 
 ### Durable Formats
 
+A format is durable when a future reader can open it without the software that wrote it. longecho judges this against the Library of Congress sustainability factors (disclosure, adoption, transparency, self-documentation, external dependencies, impact of patents, technical protection) and records, for every format, its media type, which readers can open it, and why it qualifies.
+
 | Category | Formats |
 |----------|---------|
 | Structured data | `.db`, `.sqlite`, `.sqlite3`, `.json`, `.jsonl` |
-| Documents | `.md`, `.markdown`, `.txt`, `.text`, `.rst`, `.html`, `.htm` |
-| Archives | `.zip`, `.gz`, `.tgz` |
-| Images | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif` |
+| Documents | `.md`, `.markdown`, `.txt`, `.text`, `.rst`, `.html`, `.htm`, `.pdf`, `.epub` |
+| Mail | `.eml`, `.mbox` |
 | Tabular / data | `.csv`, `.tsv`, `.xml`, `.yaml`, `.yml` |
+| Images | `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.svg`, `.tif`, `.tiff` |
+| Audio | `.wav`, `.flac`, `.mp3`, `.ogg`, `.opus` |
+| Video | `.mp4`, `.webm` |
+| Archives | `.zip`, `.gz`, `.tgz` |
+
+Run `longecho formats` for the readers and the reason behind each one. HEIC and office formats such as `.docx` are left out on purpose; keep a copy in a listed format if you want a future reader to open it.
 
 Gzipped files are recognized by their terminal `.gz` suffix, so `.jsonl.gz`, `.csv.gz`, `.tar.gz`, and similar compounds all qualify. The `.tgz` form is the compact tar-gzip spelling.
 
 Archive formats (`.zip`, `.gz`, `.tgz`) are recognized as durable because their readers are universally available and well-documented. longecho does not traverse into archives. A packed archive is treated as an opaque durable artifact: its presence satisfies the "durable format" requirement, but its contents are not inspected, validated, or indexed by longecho. To work with what is inside, extract first and operate on the resulting directory. This matches how archives are used everywhere else in computing: they are transport containers, not working formats.
 
-The principle: formats that can be read without proprietary software, have multiple implementations, and are widely documented.
+### Warnings
+
+`longecho check` also warns, without failing, about two things a future reader could lose: files that are neither in a recognized format nor plain text (listed by extension; a `.py` or a `LICENSE` is plain text and does not warn), and SQLite databases whose recent changes still sit in a non-empty `-wal` or `-journal` file beside them. Telling text from binary is the one place longecho reads inside a file (the first 4 KB), and it never changes the verdict. The generated site lists every file and marks the ones that warn, so nothing in the archive is hidden.
 
 ---
 
 ## The README
 
 The README is the interface. A human or LLM can understand any longecho source by reading its README. Everything else is optional.
+
+The README at the very top of an archive is the "start here" note; there is no separate file for that. Write it for someone with none of your tools: what this is, whose it is, and how to open each kind of file inside, down to the plainest option.
 
 ### Frontmatter
 
@@ -193,7 +207,7 @@ The pattern is fractal: a parent SFA links to its children's sites. `longecho bu
 
 `longecho build` generates a self-contained `site/index.html`: a single-file application with all content, CSS, and JavaScript inlined, and no external dependencies. Single-file is recommended for all `site/` generators (maximum durability), but not required.
 
-The SFA inlines all README content and metadata as JSON, with client-side JavaScript for navigation between views and search across sources. Actual data files (`.db`, `.json`, `.jsonl`, etc.) are linked by relative path, so the browser can open or download them directly as long as the archive stays together. Because everything is inlined or relative, the file works from `file://` with no server.
+The SFA inlines all README content and metadata as JSON, with client-side JavaScript for navigation between views and search across sources. Actual data files (`.db`, `.json`, `.jsonl`, etc.) are linked by relative path, so the browser can open or download them directly as long as the archive stays together. Images, audio, and video the browser can play are previewed inline. Because everything is inlined or relative, the file works from `file://` with no server.
 
 ### Self-Describing Output
 
@@ -240,7 +254,7 @@ Every command is a tree walk over the archive structure, with different filters 
 
 ```bash
 longecho check ~/my-data/              # Is this compliant?
-longecho check ~/my-data/ --verbose    # Show README, formats, frontmatter
+longecho check ~/my-data/ --verbose    # Show README, formats, frontmatter, warned files
 
 longecho query ~/                      # Find sources across the tree
 longecho query ~/ --search "bookmarks" # Search README text
@@ -251,7 +265,8 @@ longecho build ~/my-archive/           # Generate single-file static site
 longecho build ~/my-archive/ --open    # Open in browser after build
 
 longecho spec                          # Print specification summary
-longecho formats                       # List recognized durable formats
+longecho formats                       # Durable formats: who opens each, and why
+longecho formats --json                # The same registry as data
 ```
 
 ---

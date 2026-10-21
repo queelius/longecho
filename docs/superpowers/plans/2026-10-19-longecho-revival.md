@@ -129,22 +129,22 @@ Today `_is_foreign_site` returns "not foreign" when the output has no README or 
 - [ ] Implement with a loose reader: accept a mapping, show what is recognizable, ignore the rest. No arkiv imports, no validation, no type checks.
 - [ ] Docs: spec.md section "The data dictionary (optional)"; move the idea doc status to "implemented".
 
-### Task C2: Durable media formats
+### Task C2: Durable format registry (done 2026-10-21)
 
-**Decision needed from the author:** the exact list. Proposed, by longecho's own test (readable without proprietary software, multiple implementations, proven longevity): Documents add `.pdf`; Images add `.svg`, `.tif`, `.tiff`; new Audio category `.wav`, `.flac`; new Video category `.mp4`. DICOM stays out (open, but niche readers).
+**Decided by the author (2026-10-21):** no plugin system. Durability is a judgment, not code, and plugins would make "compliant" depend on what is installed. Instead the criteria are written down (the Library of Congress sustainability factors) and the list is a data registry with a reason per entry.
 
-**Files:** `src/longecho/checker.py` (`DURABLE_FORMAT_CATEGORIES` only; everything else derives from it), `tests/test_checker.py`, README/spec format tables.
+- [x] `src/longecho/formats.py`: `FORMATS` is a tuple of `Format(extensions, mimetype, category, readers, rationale, sidecars)`. `Reader` is the ladder rung that can open a format (standard tool, web browser, text editor). `DURABLE_EXTENSIONS`, `DURABLE_FORMAT_CATEGORIES`, `preview_kind`, and `sidecar_base` are all derived.
+- [x] Added `.pdf`, `.epub`, `.eml`, `.mbox`, `.svg`, `.tif`/`.tiff`, `.wav`, `.flac`, `.mp3`, `.ogg`, `.opus`, `.mp4`, `.webm`. HEIC and office formats stay out and are warned about instead.
+- [x] `longecho formats` shows readers and reasons; `formats --json` exposes the registry so arkiv can test its mimetypes against it without copying the list.
+- [x] The site lists every owned file, flags unrecognized ones, and previews browser-native images, audio, and video (derived from mimetype plus the browser reader).
+- [x] A test fails when README.md or docs/spec.md omits an extension the registry has.
 
-- [ ] Tests: one compliance test per new category; the existing invariant tests (flat set equals union of categories) keep passing unchanged.
-- [ ] Implement by adding entries to `DURABLE_FORMAT_CATEGORIES`.
-- [ ] Verify `longecho formats` and `longecho spec` show the new rows with no other code change.
+### Task C3: Warnings (done 2026-10-21)
 
-### Task C3: Warn about live SQLite sidecars
-
-**Files:** `src/longecho/checker.py` (`ComplianceResult.warnings: list[str]`), `src/longecho/cli.py` (`check` prints warnings, `query --json` includes them), tests.
-
-- [ ] Tests: a source containing `x.db` and `x.db-wal` (or `x.db-journal`) passes compliance with one warning naming the file and suggesting a snapshot (`sqlite3 x.db ".backup snapshot.db"` or `VACUUM INTO`); a source without sidecars has no warnings; warnings never change pass/fail or the exit code.
-- [ ] Implement by deriving sidecar names from the durable database extensions in `DURABLE_FORMAT_CATEGORIES` (no separate list).
+- [x] `ComplianceResult.warnings: list[ComplianceWarning]` with `kind: WarningKind` (`UNRECOGNIZED_FORMAT`, `SIDECAR_AT_RISK`), `message`, `paths`. Warnings never change the verdict or exit code, and they appear on failing results too.
+- [x] Unrecognized formats are grouped by extension, and only files that are not UTF-8 text warn (`reads_as_text` reads the first 4 KB; on ~/github this cut warned sources from 210 to 53, leaving office files, binaries, and legacy encodings); files inside nested sources, `site/`, and tool directories are not the parent's and do not warn there.
+- [x] SQLite sidecars come from the registry (`Format.sidecars`): a non-empty `-wal` or `-journal` warns, `-shm` never does.
+- [x] `check` prints warnings (`--verbose` names the files); `query --json` adds `warnings` when present.
 
 ### Task C4: Fixity
 
@@ -180,7 +180,9 @@ Depends on handoff task 1 (every memex exporter writes compliant output) and on 
 - [ ] book-memex: fix `github.com/alextowell/longecho` (`book_memex/cli.py:4032`, `book_memex/exports/echo_export.py:274`); add frontmatter to the ECHO export README or retire that export in favor of arkiv.
 - [ ] metafunctor update notes pointing to https://queelius.github.io/longecho/ as canonical: `post/2026-01-longecho-orchestration` (add a note), `post/2025-01-long-echo` (fix the note, which points at the stale post), `post/2026-02-07-ecosystem-overview` (remove "redundant storage, format migration, integrity verification", or say fixity is planned), `series/the-long-echo/_index.md` ("ECHO"), `post/2026-01-20-long-echo-ghost-speaks` and `post/2026-01-19-long-echo-photos-mail` ("ECHO-compliant", `--format longecho`).
 - [ ] `metafunctor-series/the-long-echo/README.md`: drop "Archive orchestration".
-- [ ] **Decision needed from the author:** the two degradation ladders. The blog's ladder is about formats (app, SQLite, grep JSONL, Markdown/HTML, plain text); the docs' ladder is about the reader's capabilities (LLM, browser, file browser, text editor, fragments). Proposal: keep the reader ladder as the headline in the docs and add the format ladder beside it as "what each layer reads", one short table.
+- [x] **Decided 2026-10-21:** the two degradation ladders are one. The docs and README now carry a single table with a third column ("Because the archive keeps..."): for each kind of reader, at least one copy of what matters in a format that reader can open. A "Standard tools" rung was added between LLMs and the browser.
+- [x] **Decided 2026-10-21:** `START_HERE.txt` is retired. The top-level README is the start-here note; the spec, README, quickstart, and `longecho spec` say to write it for a reader with none of your tools.
+- [ ] Blog update notes for the two decisions above (needs the author's approval, metafunctor repo): `post/2025-01-long-echo` and `post/2025-12-16-long-echo-toolkit` show `START_HERE.txt` and the format-only ladder; point them at the docs.
 
 ## Phase F: Deliberately not doing
 

@@ -4,22 +4,20 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
-from .checker import EchoSource, check_compliance
+from .checker import (
+    SKIP_DIRECTORIES,
+    EchoSource,
+    check_compliance,
+    should_skip_directory,
+)
 
-# Directories to skip during discovery (dot-prefixed dirs are always skipped
-# via the startswith(".") check in should_skip_directory, so only non-dot
-# names need to be listed here).
-SKIP_DIRECTORIES: set[str] = {
-    "node_modules", "__pycache__",
-    "venv", "env",
-    "dist", "build",
-    "site-packages",
-}
-
-
-def should_skip_directory(name: str) -> bool:
-    """Check if a directory should be skipped during discovery."""
-    return name.startswith(".") or name in SKIP_DIRECTORIES or name.endswith(".egg-info")
+__all__ = [
+    "SKIP_DIRECTORIES",
+    "discover_sources",
+    "matches_query",
+    "search_sources",
+    "should_skip_directory",
+]
 
 
 def discover_sources(

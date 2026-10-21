@@ -1,5 +1,6 @@
 """longecho site builder -- generates a single-file application from a longecho archive."""
 
+import os
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -10,15 +11,12 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from . import __version__
 from .checker import (
-    DEFAULT_FORMAT_SCAN_DEPTH,
-    DURABLE_EXTENSIONS,
-    EXCLUDE_PATTERNS,
     EchoSource,
     check_compliance,
-    find_readme,
     parse_readme,
+    should_skip_directory,
 )
-from .discovery import should_skip_directory
+from .formats import format_for, preview_kind, reads_as_text, sidecar_base
 
 # Reported in place of a generator name when a site/ carries no stamp.
 UNKNOWN_GENERATOR = "an unknown tool (no longecho generator stamp)"
@@ -81,47 +79,48 @@ def markdown_to_html(content: str) -> str:
     return _sanitize_html(html)
 
 
-def _get_data_files(source: EchoSource, output_path: Path) -> list[dict]:
-    """Get durable data files owned by this source, walked recursively.
+def _link(target: Path, output_path: Path, root: Path) -> str:
+    """The href that reaches ``target`` from the page at ``output_path/index.html``.
 
-    Stops at sub-source boundaries (directories with their own README) so
-    nested sources' data files appear in their own detail view, not the
-    parent's. Also skips ``site/`` subdirectories since they're viewers,
-    not data.
+    When the site lives inside the archive, links are relative (``../photos/a.png``)
+    so the archive can move as a whole. A site written outside the archive links
+    by absolute ``file://`` URI, since no relative path survives moving either one.
+    """
+    if output_path.resolve().is_relative_to(root.resolve()):
+        try:
+            return Path(os.path.relpath(target, output_path)).as_posix()
+        except ValueError:  # different drives on Windows
+            pass
+    return target.resolve().as_uri()
+
+
+def _get_data_files(
+    source: EchoSource, output_path: Path, root: Optional[Path] = None
+) -> list[dict]:
+    """List every file this source owns, for the SFA's "Data Files" section.
+
+    Ownership (see ``EchoSource.files``) already stops at nested sources and
+    ``site/``. Files in formats longecho does not recognize are listed too,
+    with ``durable: False``, so the site never hides part of the archive;
+    ``plain_text`` says whether a text editor can still open such a file.
+    SQLite sidecars are left out: they belong to their database. ``preview``
+    names the inline element a browser can show the file with, if any.
     """
     files: list[dict] = []
-    output_parent = output_path.parent
+    root = root or source.path
 
-    def scan(path: Path, depth: int) -> None:
-        if depth > DEFAULT_FORMAT_SCAN_DEPTH:
-            return
-        try:
-            for item in sorted(path.iterdir()):
-                if item.name.startswith("."):
-                    continue
-                if item.is_file():
-                    if item.name in EXCLUDE_PATTERNS:
-                        continue
-                    if item.suffix.lower() not in DURABLE_EXTENSIONS:
-                        continue
-                    rel_name = str(item.relative_to(source.path))
-                    try:
-                        rel_path = str(item.relative_to(output_parent))
-                    except ValueError:
-                        # Output is outside the archive — use absolute file:// URI
-                        rel_path = item.as_uri()
-                    files.append({"name": rel_name, "path": rel_path})
-                elif item.is_dir():
-                    if item.name == "site" or should_skip_directory(item.name):
-                        continue
-                    # Don't descend into nested sources — they own their own data
-                    if find_readme(item) is not None:
-                        continue
-                    scan(item, depth + 1)
-        except PermissionError:
-            pass
+    for item in source.files:
+        if sidecar_base(item) is not None:
+            continue
+        durable = format_for(item) is not None
+        files.append({
+            "name": item.relative_to(source.path).as_posix(),
+            "path": _link(item, output_path, root),
+            "durable": durable,
+            "plain_text": not durable and reads_as_text(item),
+            "preview": preview_kind(item),
+        })
 
-    scan(source.path, 0)
     return sorted(files, key=lambda x: x["name"])
 
 
@@ -191,7 +190,9 @@ def make_json_safe(obj: object) -> object:
     return obj
 
 
-def _source_to_json(source: EchoSource, output_path: Path) -> dict:
+def _source_to_json(
+    source: EchoSource, output_path: Path, root: Optional[Path] = None
+) -> dict:
     """Convert an EchoSource to a JSON-serializable dict for the SFA, recursively."""
     readme_html = ""
     try:
@@ -204,7 +205,8 @@ def _source_to_json(source: EchoSource, output_path: Path) -> dict:
 
     # Recursively discover and convert children
     child_sources = discover_sub_sources(source)
-    children = [_source_to_json(c, output_path) for c in child_sources]
+    root = root or source.path
+    children = [_source_to_json(c, output_path, root) for c in child_sources]
 
     # Compute relative path to source's site/index.html if it exists.
     # Skip self-references: the root source's site IS the output we're
@@ -216,11 +218,7 @@ def _source_to_json(source: EchoSource, output_path: Path) -> dict:
         except OSError:
             is_self_ref = False
         if not is_self_ref:
-            try:
-                rel = source.site_path / "index.html"
-                site_url = str(rel.relative_to(output_path.parent))
-            except ValueError:
-                site_url = (source.site_path / "index.html").as_uri()
+            site_url = _link(source.site_path / "index.html", output_path, root)
 
     return {
         "name": source.name,
@@ -228,7 +226,7 @@ def _source_to_json(source: EchoSource, output_path: Path) -> dict:
         "durable_formats": source.durable_formats,
         "frontmatter": frontmatter,
         "readme_html": readme_html,
-        "data_files": _get_data_files(source, output_path),
+        "data_files": _get_data_files(source, output_path, root),
         "site_url": site_url,
         "children": children,
     }
