@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 longecho is both a philosophy and a tool for durable personal archives. A directory is longecho-compliant if it has a README.md/README.txt + data in durable formats. The CLI validates compliance, queries archives, and builds single-file browsable sites.
 
-**Status:** Alpha. v0.6.0 on PyPI (`pip install longecho`). The version lives only in `src/longecho/__init__.py`; pyproject reads it via `[tool.hatch.version]`.
+**Status:** Alpha. v0.6.1 on PyPI (`pip install longecho`). The version lives only in `src/longecho/__init__.py`; pyproject reads it via `[tool.hatch.version]`.
 
 ## Commands
 
