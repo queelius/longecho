@@ -235,8 +235,11 @@ def find_readme(path: Path) -> Optional[Path]:
     """Find README file at the root of a directory."""
     for name in README_NAMES:
         readme = path / name
-        if readme.is_file():
-            return readme
+        try:
+            if readme.is_file():
+                return readme
+        except OSError:  # a link into a directory we may not search
+            continue
     return None
 
 

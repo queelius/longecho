@@ -93,7 +93,7 @@ The `contents` frontmatter field lists what is in a directory. Each entry uses t
 - **Directory entries** curate and order sub-sources for `longecho build`. Only listed directories become navigable sub-sources, and they appear in the order you list them.
 - **File entries** are informational metadata only. They tell a reader what the directory holds, but they do not change the build structure and are not surfaced separately in the generated site.
 
-Without a `contents` field, sub-source discovery is automatic: every longecho-compliant subdirectory appears, in alphabetical order.
+When `contents` names no directory (it is absent, empty, or lists only files), sub-source discovery is automatic: every longecho-compliant subdirectory appears, in alphabetical order. A directory entry for the directory itself (`path: .`) or for a path outside it is skipped, though it still makes the list curated.
 
 ## Recursive structure
 

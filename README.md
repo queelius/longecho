@@ -167,7 +167,7 @@ When `contents` is present, `longecho build` uses it as follows:
 - **Directory entries** (`conversations/`, `bookmarks/`) control **curation** and **ordering** of sub-sources. Only listed directories become navigable sub-sources in the build output, and they appear in the order listed.
 - **File entries** (`ctk.db`) are **informational metadata**: they describe what's in the directory for humans and LLMs who read the README, but do not affect build structure. They are preserved in the frontmatter (where any reader can see them), but longecho does not surface them separately in the generated site.
 
-When `contents` is absent, the tool auto-discovers all longecho-compliant subdirectories in alphabetical order, and the files the directory owns (within two levels, outside nested sources) appear in the site's "Data Files" list.
+When `contents` names no directory (it is absent, empty, or lists only files), the tool auto-discovers all longecho-compliant subdirectories in alphabetical order. Either way, the files the directory owns (within two levels, outside nested sources) appear in the site's "Data Files" list.
 
 Each sub-source is always self-describing. The parent's `contents` field controls which children appear and in what order, but never overrides a child's own name or description.
 

@@ -108,6 +108,67 @@ class TestDiscoverSubSources:
         assert len(sources) == 1
         assert sources[0].name == "Source 1"
 
+    def test_contents_with_only_file_entries_auto_discovers(self, temp_dir):
+        """File entries are informational, so they must not hide sub-sources."""
+        (temp_dir / "README.md").write_text(
+            "---\ncontents:\n  - path: index.json\n---\n# Root\n"
+        )
+        (temp_dir / "index.json").write_text("[]")
+        kid = temp_dir / "kid"
+        kid.mkdir()
+        (kid / "README.md").write_text("# Kid\n")
+        (kid / "a.json").write_text("{}")
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert [s.name for s in discover_sub_sources(result.source)] == ["Kid"]
+
+    def test_empty_contents_auto_discovers(self, temp_dir):
+        (temp_dir / "README.md").write_text("---\ncontents: []\n---\n# Root\n")
+        (temp_dir / "index.json").write_text("[]")
+        kid = temp_dir / "kid"
+        kid.mkdir()
+        (kid / "README.md").write_text("# Kid\n")
+        (kid / "a.json").write_text("{}")
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert [s.name for s in discover_sub_sources(result.source)] == ["Kid"]
+
+    def test_contents_naming_only_an_outside_directory_stays_curated(self, temp_dir):
+        """A skipped directory entry must not open the door to auto-discovery."""
+        outside = temp_dir / "outside"
+        outside.mkdir()
+        (outside / "README.md").write_text("# Outside\n")
+        (outside / "a.json").write_text("{}")
+        root = temp_dir / "root"
+        root.mkdir()
+        (root / "README.md").write_text("---\ncontents:\n  - path: ext\n---\n# Root\n")
+        (root / "a.json").write_text("{}")
+        (root / "ext").symlink_to(outside)
+        kid = root / "kid"
+        kid.mkdir()
+        (kid / "README.md").write_text("# Kid\n")
+        (kid / "a.json").write_text("{}")
+        result = check_compliance(root)
+        assert result.source is not None
+        assert discover_sub_sources(result.source) == []
+
+    def test_a_symlink_to_itself_is_never_a_sub_source(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Root\n")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "alias").symlink_to(".")
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert discover_sub_sources(result.source) == []
+
+    def test_a_source_is_never_its_own_sub_source(self, temp_dir):
+        (temp_dir / "README.md").write_text(
+            "---\ncontents:\n  - path: .\n---\n# Root\n"
+        )
+        (temp_dir / "a.json").write_text("{}")
+        result = check_compliance(temp_dir)
+        assert result.source is not None
+        assert discover_sub_sources(result.source) == []
+
     def test_contents_ordering(self, temp_dir):
         """Contents field controls ordering."""
         (temp_dir / "README.md").write_text(
@@ -474,6 +535,30 @@ class TestMakeJsonSafe:
         data = {"name": "test", "count": 42, "flag": True, "items": [1, "two"]}
         assert make_json_safe(data) == data
 
+    def test_sets_become_sorted_lists(self):
+        result = make_json_safe({"tags": {"b", "a"}, "pair": ("x", 1)})
+        assert result == {"tags": ["a", "b"], "pair": ["x", 1]}
+        json.dumps(result)
+
+    def test_date_keys_become_strings(self):
+        from datetime import date
+        result = make_json_safe({date(2024, 1, 1): "new year", 3: "three", True: 1})
+        assert result == {"2024-01-01": "new year", "3": "three", "true": 1}
+        json.dumps(result, sort_keys=True)  # the site's tojson sorts keys
+
+    def test_build_survives_mixed_key_types(self, temp_dir):
+        (temp_dir / "README.md").write_text("---\nm:\n  2024-01-01: x\n  3: y\n  b: z\n---\n# T\n")
+        (temp_dir / "a.json").write_text("{}")
+        assert build_site(temp_dir).success
+
+    def test_any_other_yaml_value_still_serializes(self):
+        json.dumps(make_json_safe({"blob": b"\x00\x01"}))
+
+    def test_build_survives_a_yaml_set_in_frontmatter(self, temp_dir):
+        (temp_dir / "README.md").write_text("---\nextra: !!set {a: null}\n---\n# T\n")
+        (temp_dir / "a.json").write_text("{}")
+        assert build_site(temp_dir).success
+
 
 class TestRecursiveDataFiles:
     """Tests for _get_data_files walking nested directories."""
@@ -667,6 +752,72 @@ class TestOutputSafety:
         second = build_site(archive, output=out)
         assert second.success and second.sources_count == 0
 
+    def test_refuses_a_site_dir_symlinked_to_the_archive(self, temp_dir):
+        archive = self._archive(temp_dir)
+        (archive / "site").symlink_to(archive)
+        result = build_site(archive, force=True)
+        assert not result.success
+        assert (archive / "README.md").read_text() == "# Mine\n\nMy words."
+
+
+class TestBuildCycles:
+    """A tree that points back at itself builds once and stops."""
+
+    def test_contents_listing_the_source_itself(self, temp_dir):
+        (temp_dir / "README.md").write_text(
+            "---\ncontents:\n  - path: .\n---\n# Root\n"
+        )
+        (temp_dir / "a.json").write_text("{}")
+        result = build_site(temp_dir)
+        assert result.success and result.sources_count == 0
+
+    def test_symlink_back_to_an_ancestor(self, temp_dir):
+        (temp_dir / "README.md").write_text("# Root\n")
+        (temp_dir / "a.json").write_text("{}")
+        kid = temp_dir / "kid"
+        kid.mkdir()
+        (kid / "README.md").write_text("# Kid\n")
+        (kid / "b.json").write_text("{}")
+        (kid / "up").symlink_to(temp_dir)
+        result = build_site(temp_dir)
+        assert result.success and result.sources_count == 1
+
+    def test_contents_listing_a_symlink_loop(self, temp_dir):
+        (temp_dir / "README.md").write_text("---\ncontents:\n  - path: loop\n---\n# Root\n")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "loop").symlink_to("loop")
+        assert build_site(temp_dir).success
+
+    def test_a_fifo_named_readme_is_never_opened(self, temp_dir):
+        import os
+        import threading
+
+        (temp_dir / "README.md").write_text("# Root\n")
+        (temp_dir / "a.json").write_text("{}")
+        (temp_dir / "kid").mkdir()
+        os.mkfifo(temp_dir / "kid" / "README.md")
+        outcome = []
+        worker = threading.Thread(target=lambda: outcome.append(build_site(temp_dir)), daemon=True)
+        worker.start()
+        worker.join(10)
+        assert outcome and outcome[0].success, "build blocked reading a FIFO"
+
+    def test_symlink_into_unreadable_directory(self, temp_dir):
+        import os
+
+        if os.geteuid() == 0:
+            pytest.skip("root can read everything")
+        (temp_dir / "README.md").write_text("# Root\n")
+        (temp_dir / "a.json").write_text("{}")
+        locked = temp_dir / "locked"
+        (locked / "sub").mkdir(parents=True)
+        os.symlink(locked / "sub", temp_dir / "link")
+        locked.chmod(0)
+        try:
+            assert build_site(temp_dir).success
+        finally:
+            locked.chmod(0o755)
+
 
 class TestSanitizer:
     """README HTML keeps formatting but loses anything that can run."""
@@ -690,6 +841,14 @@ class TestSanitizer:
         html = markdown_to_html('<style>p{}</style><iframe src="x"></iframe><p onclick="x">t</p>')
         assert "style" not in html and "iframe" not in html and "onclick" not in html
         assert "<p>t</p>" in html
+
+    def test_malformed_url_is_dropped_not_fatal(self):
+        html = markdown_to_html('<a href="http://[">bad</a> after')
+        assert "href" not in html and "bad" in html and "after" in html
+
+    def test_void_embed_does_not_swallow_what_follows(self):
+        html = markdown_to_html('<embed src="x">\n\n<p>Preserve me</p>')
+        assert "embed" not in html and "<p>Preserve me</p>" in html
 
 
 class TestDataFileEntries:

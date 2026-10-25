@@ -119,6 +119,21 @@ class TestUntrustedTextIsPrintedLiterally:
         assert "[bold]Loud[/bold]" in result.stdout
         assert "A [link] here." in result.stdout
 
+    def test_markup_in_the_query_table_title(self, temp_dir):
+        root = temp_dir / "[/bold]"  # directories "[" and "bold]"
+        root.mkdir(parents=True)
+        (root / "README.md").write_text("# T\n\nT.")
+        (root / "a.json").write_text("{}")
+        result = runner.invoke(app, ["query", str(root), "--table"])
+        assert result.exit_code == 0, result.output
+
+    def test_query_json_survives_date_keys_in_frontmatter(self, temp_dir):
+        (temp_dir / "README.md").write_text("---\nhistory:\n  2024-01-01: began\n---\n# T\n")
+        (temp_dir / "a.json").write_text("{}")
+        result = runner.invoke(app, ["query", str(temp_dir), "--json"])
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout)[0]["frontmatter"]["history"] == {"2024-01-01": "began"}
+
 
 class TestVerboseReaders:
     def test_lists_the_readers_that_can_open_the_data(self, temp_dir):

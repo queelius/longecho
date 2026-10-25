@@ -122,6 +122,10 @@ class TestReadsAsText:
         (temp_dir / "a").write_bytes(b"x" * 4095 + "\u00e9".encode())
         assert reads_as_text(temp_dir / "a")
 
+    def test_character_cut_off_by_the_end_of_the_file_is_binary(self, temp_dir):
+        (temp_dir / "a").write_bytes(b"abc\xc3")
+        assert not reads_as_text(temp_dir / "a")
+
     def test_nul_or_invalid_utf8_is_binary(self, temp_dir):
         (temp_dir / "a").write_bytes(b"abc\x00def")
         (temp_dir / "b").write_bytes(b"\xff\xfe")

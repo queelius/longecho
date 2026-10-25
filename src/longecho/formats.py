@@ -338,13 +338,15 @@ def reads_as_text(path: Path, sample: int = TEXT_SAMPLE_BYTES) -> bool:
     try:
         with open(path, "rb") as f:
             head = f.read(sample)
+            at_end = not f.read(1)
     except OSError:
         return False
     if b"\x00" in head:
         return False
-    # final=False tolerates a multibyte character cut off at the sample edge.
+    # A multibyte character cut off by the sample edge is fine; one cut off
+    # by the end of the file is not UTF-8.
     try:
-        codecs.getincrementaldecoder("utf-8")().decode(head, final=False)
+        codecs.getincrementaldecoder("utf-8")().decode(head, final=at_end)
     except UnicodeDecodeError:
         return False
     return True

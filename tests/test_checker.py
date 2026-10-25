@@ -588,6 +588,23 @@ class TestWalkRobustness:
         assert result.source is not None
         assert [p.name for p in result.source.files] == ["a.json"]
 
+    def test_readme_symlink_into_unreadable_directory(self, temp_dir):
+        import os
+
+        if os.geteuid() == 0:
+            pytest.skip("root can read everything")
+        (temp_dir / "a.json").write_text("{}")
+        locked = temp_dir / "locked"
+        locked.mkdir()
+        (locked / "README.md").write_text("# T\n")
+        os.symlink(locked / "README.md", temp_dir / "README.md")
+        locked.chmod(0)
+        try:
+            result = check_compliance(temp_dir)
+            assert not result.compliant
+        finally:
+            locked.chmod(0o755)
+
 
 class TestWhatCountsAsData:
     def test_lowercase_readme_is_not_its_own_data(self, temp_dir):

@@ -1,5 +1,6 @@
 """longecho site builder -- generates a single-file application from a longecho archive."""
 
+import json
 import os
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -60,8 +61,10 @@ _ALLOWED_TAGS: dict[str, frozenset[str]] = {
     "td": frozenset({"align"}),
 }
 _VOID_TAGS = frozenset({"br", "hr", "img"})
+# Elements whose content goes with them. Void elements (like ``embed``) have
+# no content and no end tag, so they belong only off the allowlist, not here.
 _DROP_WITH_CONTENT = frozenset({
-    "script", "style", "iframe", "object", "embed", "template", "noscript",
+    "script", "style", "iframe", "object", "template", "noscript",
     "svg", "math", "textarea", "select", "head", "title",
 })
 _URL_ATTRS = frozenset({"href", "src"})
@@ -72,7 +75,11 @@ def _safe_url(value: str) -> bool:
     """Relative links and a few plain schemes only. Browsers ignore control
     characters and whitespace inside a scheme, so those are removed first."""
     cleaned = "".join(ch for ch in value if ch > " " and ch != "\x7f")
-    return urlsplit(cleaned).scheme.lower() in _SAFE_SCHEMES
+    try:
+        scheme = urlsplit(cleaned).scheme
+    except ValueError:  # e.g. "http://[", an unterminated IPv6 host
+        return False
+    return scheme.lower() in _SAFE_SCHEMES
 
 
 class _Sanitizer(HTMLParser):
@@ -204,7 +211,7 @@ def _is_foreign_site(output_path: Path) -> tuple[bool, str]:
 def _site_generator(path: Path) -> Optional[str]:
     """The ``generator`` stamp in ``path/README.md`` frontmatter, if any."""
     readme_path = path / "README.md"
-    readme = parse_readme(readme_path) if readme_path.is_file() else None
+    readme = parse_readme(readme_path) if _is_file(readme_path) else None
     generator = (readme.frontmatter or {}).get("generator") if readme else None
     return str(generator) if generator else None
 
@@ -215,57 +222,124 @@ def _is_longecho_site(path: Path) -> bool:
     return generator is not None and generator.startswith(LONGECHO_GENERATOR)
 
 
+def _is_dir(path: Path) -> bool:
+    """``Path.is_dir`` that answers False for targets it may not inspect."""
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _is_file(path: Path) -> bool:
+    """``Path.is_file`` that answers False for targets it may not inspect."""
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
+def _named_directories(source: EchoSource) -> list[Path]:
+    """Every directory that ``contents`` names, resolved, in the order listed.
+
+    File entries (informational) and paths that do not resolve, such as a
+    symlink loop, are left out. Directories outside the source are kept here
+    so that naming one still makes the list curated; the caller skips them.
+    """
+    named = []
+    for entry in source.contents or []:
+        entry_path = entry.get("path")
+        if not isinstance(entry_path, str):
+            continue
+        try:
+            sub_path = (source.path / entry_path).resolve()
+        except (OSError, RuntimeError):  # RuntimeError: symlink loop before 3.13
+            continue
+        if _is_dir(sub_path):
+            named.append(sub_path)
+    return named
+
+
+def _discovered_directories(source: EchoSource) -> list[Path]:
+    """Every subdirectory that may hold a sub-source, alphabetically."""
+    try:
+        items = sorted(source.path.iterdir())
+    except OSError:
+        return []
+    return [
+        item for item in items
+        if item.name != "site"
+        and not should_skip_directory(item.name)
+        and _is_dir(item)
+        and not _is_longecho_site(item)  # an earlier build --output
+    ]
+
+
 def discover_sub_sources(source: EchoSource) -> list[EchoSource]:
-    """Discover sub-sources using contents field or auto-discovery."""
-    path = source.path
-    sources: list[EchoSource] = []
+    """The compliant sub-sources of ``source``, in display order.
 
-    if source.contents:
-        # Curated: only listed paths, in order
-        for entry in source.contents:
-            entry_path = entry.get("path", "")
-            sub_path = (path / entry_path).resolve()
-            # Prevent path traversal
-            if not sub_path.is_relative_to(path):
-                continue
-            if not sub_path.is_dir():
-                continue
-
-            result = check_compliance(sub_path)
-            if result.compliant and result.source:
-                sources.append(result.source)
+    Directory entries in ``contents`` curate and order them; entries outside
+    the source are skipped (no path traversal). File entries are
+    informational, so a ``contents`` that names no directory leaves discovery
+    automatic: every subdirectory, alphabetically. A source is never its own
+    sub-source, whether through ``path: .`` or a symlink to itself.
+    """
+    named = _named_directories(source)
+    if named:
+        candidates = [p for p in named if p.is_relative_to(source.path)]
     else:
-        # Auto-discover: all compliant subdirectories, alphabetical
-        for item in sorted(path.iterdir()):
-            if not item.is_dir():
-                continue
-            if item.name == "site" or should_skip_directory(item.name):
-                continue
-            if _is_longecho_site(item):  # an earlier build --output
-                continue
-
-            result = check_compliance(item)
-            if result.compliant and result.source:
-                sources.append(result.source)
-
+        candidates = _discovered_directories(source)
+    sources: list[EchoSource] = []
+    for candidate in candidates:
+        result = check_compliance(candidate)
+        if result.compliant and result.source and result.source.path != source.path:
+            sources.append(result.source)
     return sources
 
 
+_JSON_SCALARS = (str, int, float, bool, type(None))
+
+
 def make_json_safe(obj: object) -> object:
-    """Recursively convert non-JSON-serializable types (e.g. datetime.date) to strings."""
+    """Recursively convert YAML values that JSON cannot hold.
+
+    ``yaml.safe_load`` can produce dates (as values or as keys), sets, and
+    bytes (``!!binary``). Dates become ISO strings, sets become sorted lists,
+    keys JSON cannot hold become strings, and any other value becomes its
+    ``str``, so one unusual README never stops a build or a query.
+    """
     if isinstance(obj, dict):
-        return {k: make_json_safe(v) for k, v in obj.items()}
-    if isinstance(obj, list):
+        return {_json_key(k): make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
         return [make_json_safe(v) for v in obj]
+    if isinstance(obj, (set, frozenset)):
+        return sorted((make_json_safe(v) for v in obj), key=str)
     if isinstance(obj, (date, datetime)):
         return obj.isoformat()
-    return obj
+    if isinstance(obj, _JSON_SCALARS):
+        return obj
+    return str(obj)
+
+
+def _json_key(key: object) -> str:
+    """The string JSON would use for this key. Keys must all be strings
+    because the site's ``tojson`` sorts them, and ``3 < "b"`` is an error."""
+    if isinstance(key, str):
+        return key
+    safe = make_json_safe(key)
+    return safe if isinstance(safe, str) else json.dumps(safe)
 
 
 def _source_to_json(
-    source: EchoSource, output_path: Path, root: Optional[Path] = None
+    source: EchoSource,
+    output_path: Path,
+    root: Optional[Path] = None,
+    ancestors: frozenset[Path] = frozenset(),
 ) -> dict:
-    """Convert an EchoSource to a JSON-serializable dict for the SFA, recursively."""
+    """Convert an EchoSource to a JSON-serializable dict for the SFA, recursively.
+
+    A child that is one of its own ancestors (a symlink pointing back up the
+    tree) is left out, so every path through the tree ends.
+    """
     readme_html = ""
     try:
         content = source.readme_path.read_text(encoding="utf-8")
@@ -276,9 +350,10 @@ def _source_to_json(
     frontmatter: dict = make_json_safe(source.frontmatter or {})  # type: ignore[assignment]
 
     # Recursively discover and convert children
-    child_sources = discover_sub_sources(source)
+    lineage = ancestors | {source.path}
+    child_sources = [c for c in discover_sub_sources(source) if c.path not in lineage]
     root = root or source.path
-    children = [_source_to_json(c, output_path, root) for c in child_sources]
+    children = [_source_to_json(c, output_path, root, lineage) for c in child_sources]
 
     # Compute relative path to source's site/index.html if it exists.
     # Skip self-references: the root source's site IS the output we're
@@ -375,7 +450,8 @@ def build_site(
 
     # Writing index.html and README.md into the archive itself, or into a
     # directory that contains it, would replace a README someone wrote.
-    if path.is_relative_to(output_path):
+    # Resolved, so a site/ symlinked back to the archive counts too.
+    if path.is_relative_to(output_path.resolve()):
         return BuildResult(
             success=False,
             error=(

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Fixes from an independent code review of 0.6.0.
+
+### Fixed
+- `build` no longer recurses forever, or crashes, when `contents` lists the
+  directory itself (`path: .`) or a symlink loop, or when a symlink points
+  back up the tree. A source never appears as its own sub-source.
+- `build` refuses a `site/` that is a symlink to the archive, even with
+  `--force`; it used to overwrite the archive's own README.
+- One malformed link in a README (such as `http://[`) no longer stops the
+  whole build; the link is dropped and the text kept.
+- A bare `<embed>` in a README no longer hides everything after it.
+- Frontmatter with a YAML set, a binary value, a date used as a key, or
+  keys of mixed types no longer crashes `build` or `query --json`. Every key
+  becomes the string JSON would use.
+- `check`, `query`, and `build` no longer crash on a README, or a
+  subdirectory, behind a symlink into a directory they may not search.
+- `query --table` no longer crashes, or styles text, when the path contains
+  Rich markup such as `[/bold]`.
+- A short file ending in a cut-off UTF-8 character now counts as binary and
+  is warned about.
+
+### Changed
+- File entries in `contents` are now purely informational, as documented: a
+  `contents` that names no directory leaves sub-source discovery automatic.
+  Before, listing only files hid every subdirectory from the site. A
+  directory entry that is skipped (the directory itself, or a path outside
+  it) still makes the list curated.
+
 ## [0.6.0] - 2026-10-21
 
 ### Added

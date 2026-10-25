@@ -211,7 +211,7 @@ def query(
         return
 
     if table_format:
-        table = Table(title=f"longecho sources under {path}")
+        table = Table(title=f"longecho sources under {_lit(path)}")
         table.add_column("Name", style="cyan")
         table.add_column("Path")
         table.add_column("Formats", style="green")
@@ -323,8 +323,9 @@ def _format_spec() -> str:
         "  Sources can contain other sources. Structure is recursive: every level is",
         "  the same kind of object, self-describing even if fragmented.",
         "",
-        "  The contents field lists what's in a directory. When present, it controls",
-        "  curation (only listed entries built) and ordering. When absent, the tool",
+        "  The contents field lists what's in a directory. Its directory entries",
+        "  control curation (only listed directories built) and ordering. File",
+        "  entries are informational. When it names no directory, the tool",
         "  auto-discovers compliant subdirectories alphabetically.",
         "",
         "Durable Formats:",
